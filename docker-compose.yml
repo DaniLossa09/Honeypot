@@ -1,0 +1,46 @@
+version: "3.9"
+
+networks:
+  honeypot-net:
+    driver: bridge
+
+volumes:
+  logs:
+
+services:
+
+  cowrie:
+    build: ./cowrie
+    container_name: cowrie
+    restart: unless-stopped
+    ports:
+      - "22:2222"    # SSH
+      - "23:2223"    # Telnet
+    volumes:
+      - logs:/home/cowrie/cowrie/var/log/cowrie
+    networks:
+      - honeypot-net
+
+  opencanary:
+    build: ./opencanary
+    container_name: opencanary
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - logs:/var/log/opencanary
+    networks:
+      - honeypot-net
+
+  dionaea:
+    build: ./dionaea
+    container_name: dionaea
+    restart: unless-stopped
+    ports:
+      - "21:21"
+      - "20:20"
+    volumes:
+      - logs:/opt/dionaea/var/log/dionaea
+    networks:
+      - honeypot-net
