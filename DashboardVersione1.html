@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoneypotX — Cyber Threat Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #080c10;
+    --surface:  #0d1117;
+    --border:   #1a2332;
+    --accent:   #00ff88;
+    --accent2:  #00aaff;
+    --danger:   #ff3355;
+    --warn:     #ffaa00;
+    --safe:     #00ff88;
+    --text:     #c9d1d9;
+    --muted:    #4a5568;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-head: 'Rajdhani', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── SFONDO GRIGLIA ANIMATA ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,17,23,0.95);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 12px rgba(0,255,136,0.3);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 12px rgba(0,255,136,0.3); }
+    50%       { box-shadow: 0 0 24px rgba(0,255,136,0.6); }
+  }
+
+  .logo-text {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.2; }
+  }
+
+  .timestamp {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── LAYOUT PRINCIPALE ── */
+  main {
+    position: relative;
+    z-index: 1;
+    padding: 24px 32px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* ── STAT CARDS ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.danger::before  { background: var(--danger); }
+  .stat-card.warn::before    { background: var(--warn); }
+  .stat-card.safe::before    { background: var(--safe); }
+  .stat-card.info::before    { background: var(--accent2); }
+
+  .stat-card:hover { border-color: var(--accent); }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: var(--font-head);
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+  }
+
+  .stat-value.danger { color: var(--danger); }
+  .stat-value.warn   { color: var(--warn); }
+  .stat-value.safe   { color: var(--safe); }
+  .stat-value.info   { color: var(--accent2); }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── SEZIONE MAPPA + GRAFICI ── */
+  .middle-row {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-title {
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* ── MAPPA ── */
+  #map {
+    height: 360px;
+    background: #0a0e14;
+  }
+
+  .leaflet-container { background: #0a0e14 !important; }
+
+  /* ── GRAFICO DONUT ── */
+  .chart-wrap {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #attackChart { max-height: 200px; }
+
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+
+  .legend-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .legend-name { color: var(--text); }
+  .legend-count {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 11px;
+  }
+
+  /* ── TABELLA EVENTI ── */
+  .events-section { margin-bottom: 24px; }
+
+  .events-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .filter-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,136,0.05);
+  }
+
+  .events-table-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(26,35,50,0.5);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(0,255,136,0.03); }
+
+  tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  .badge-danger { background: rgba(255,51,85,0.15);  color: var(--danger); border: 1px solid rgba(255,51,85,0.3); }
+  .badge-warn   { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.3); }
+  .badge-safe   { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
+
+  .attack-type {
+    font-weight: 500;
+    color: #fff;
+  }
+
+  .ip-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  .country-text { color: var(--muted); font-size: 12px; }
+  .service-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── MODAL SPIEGAZIONE AI ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    animation: modal-in 0.25s ease;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .modal-header {
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .modal-attack-type {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.2s;
+  }
+
+  .modal-close:hover { color: #fff; }
+
+  .modal-body { padding: 24px 28px; }
+
+  .modal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .meta-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .meta-chip span { color: var(--text); }
+
+  .ai-section {
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.15);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .ai-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .advice-section {
+    background: rgba(0,170,255,0.05);
+    border: 1px solid rgba(0,170,255,0.15);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+
+  .advice-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .advice-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .no-explanation {
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 48px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .middle-row { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🍯</div>
+    <div class="logo-text">Honeypot<span>X</span></div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      MONITORING ACTIVE
+    </div>
+    <div class="timestamp" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card danger">
+      <div class="stat-label">⚡ Attacchi Totali</div>
+      <div class="stat-value danger" id="stat-total">0</div>
+      <div class="stat-sub">eventi rilevati</div>
+    </div>
+    <div class="stat-card danger">
+      <div class="stat-label">🔴 Pericolo Alto</div>
+      <div class="stat-value danger" id="stat-high">0</div>
+      <div class="stat-sub">richiedono attenzione</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-label">🟡 Pericolo Medio</div>
+      <div class="stat-value warn" id="stat-medium">0</div>
+      <div class="stat-sub">da monitorare</div>
+    </div>
+    <div class="stat-card info">
+      <div class="stat-label">🌍 Paesi Attaccanti</div>
+      <div class="stat-value info" id="stat-countries">0</div>
+      <div class="stat-sub">origini uniche</div>
+    </div>
+  </div>
+
+  <!-- MAPPA + GRAFICO -->
+  <div class="middle-row">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> TIPO ATTACCO</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="attackChart"></canvas>
+        <div class="legend" id="chartLegend"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABELLA EVENTI -->
+  <div class="card events-section">
+    <div class="card-header">
+      <div class="card-title"><div class="dot"></div> EVENTI RILEVATI</div>
+      <div class="events-controls">
+        <button class="filter-btn active" onclick="filterEvents('all', this)">TUTTI</button>
+        <button class="filter-btn" onclick="filterEvents('Alto', this)">🔴 ALTO</button>
+        <button class="filter-btn" onclick="filterEvents('Medio', this)">🟡 MEDIO</button>
+        <button class="filter-btn" onclick="filterEvents('Basso', this)">🟢 BASSO</button>
+      </div>
+    </div>
+    <div class="events-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Pericolo</th>
+            <th>Tipo Attacco</th>
+            <th>IP Attaccante</th>
+            <th>Paese</th>
+            <th>Servizio</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody">
+          <tr><td colspan="6" class="empty">Caricamento dati...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODAL SPIEGAZIONE AI -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-attack-type" id="modalTitle">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta" id="modalMeta"></div>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATI ────────────────────────────────────────────────────────────────────
+
+// Dati finti che rispecchiano il formato di events_export.json
+// e explanations_export.json prodotti dai tuoi script Python
+const EVENTS = [
+  { id:91,  timestamp:"2026-03-31T10:00:00", source:"cowrie",     ip:"185.234.219.12", port:22,  service:"ssh",   attack_type:"Brute Force",    country:"Austria",       city:"Vienna",      lat:48.2, lon:16.3 },
+  { id:92,  timestamp:"2026-03-31T11:00:00", source:"opencanary", ip:"45.33.32.156",   port:80,  service:"http",  attack_type:"SQL Injection",  country:"United States", city:"Fremont",     lat:37.5, lon:-121.9 },
+  { id:94,  timestamp:"2026-03-31T11:10:00", source:"opencanary", ip:"104.21.56.89",   port:80,  service:"http",  attack_type:"XSS Attack",     country:"Canada",        city:"Toronto",     lat:43.7, lon:-79.4 },
+  { id:95,  timestamp:"2026-03-31T12:00:00", source:"dionaea",    ip:"77.88.55.60",    port:445, service:"smb",   attack_type:"Malware Upload", country:"Russia",        city:"Moscow",      lat:55.7, lon:37.6 },
+  { id:96,  timestamp:"2026-03-31T12:05:00", source:"dionaea",    ip:"1.2.3.4",        port:4444,service:"shell", attack_type:"Malware Upload", country:"Australia",     city:"Sydney",      lat:-33.8,lon:151.2 },
+  { id:97,  timestamp:"2026-03-31T10:05:00", source:"cowrie",     ip:"91.108.4.3",     port:22,  service:"ssh",   attack_type:"Command Injection", country:"Germany",   city:"Berlin",      lat:52.5, lon:13.4 },
+  { id:98,  timestamp:"2026-03-31T13:00:00", source:"opencanary", ip:"198.51.100.7",   port:21,  service:"ftp",   attack_type:"FTP Attack",     country:"Brazil",        city:"São Paulo",   lat:-23.5,lon:-46.6 },
+  { id:99,  timestamp:"2026-03-31T13:30:00", source:"cowrie",     ip:"185.234.219.12", port:22,  service:"ssh",   attack_type:"Brute Force",    country:"Austria",       city:"Vienna",      lat:48.2, lon:16.3 },
+  { id:100, timestamp:"2026-03-31T14:00:00", source:"dionaea",    ip:"5.188.206.14",   port:445, service:"smb",   attack_type:"SMB Attack",     country:"China",         city:"Shanghai",    lat:31.2, lon:121.5 },
+  { id:101, timestamp:"2026-03-31T14:30:00", source:"opencanary", ip:"212.58.246.90",  port:80,  service:"http",  attack_type:"Web Crawl / Recon", country:"United Kingdom", city:"London", lat:51.5, lon:-0.1 },
+];
+
+const EXPLANATIONS = {
+  91:  { danger_level:"Alto",  explanation_it:"Immagina un ladro che ha trovato la porta della tua casa e prova migliaia di chiavi diverse, una dopo l'altra, sperando che una apra. Questo è esattamente ciò che sta accadendo: qualcuno in Austria sta provando combinazioni di nome utente e password sul nostro sistema SSH, cercando di entrare. Lo fa in modo automatico, con programmi che provano centinaia di tentativi al minuto.", advice:"Utilizza password lunghe e complesse, mai scontate. Attiva l'autenticazione a due fattori: anche se l'attaccante indovinasse la password, non potrebbe comunque entrare." },
+  92:  { danger_level:"Alto",  explanation_it:"Pensa a un modulo di ricerca su un sito web come a un cassetto chiuso. Un attacco SQL Injection è come qualcuno che invece di cercare qualcosa normalmente, inserisce una combinazione magica di parole che fa aprire tutti i cassetti del magazzino. L'attaccante sta cercando di 'ingannare' il database del sistema per farsi dare informazioni riservate o prenderne il controllo.", advice:"Non fidarti mai dei dati inseriti dagli utenti senza controllarli. Usa query preparate nel codice e mantieni il software sempre aggiornato." },
+  94:  { danger_level:"Medio", explanation_it:"Un attacco XSS è come lasciare un biglietto trappola sul tavolo di qualcun altro. L'attaccante inserisce del codice malevolo in una pagina web, sperando che altri utenti lo eseguano inconsapevolmente. Quando un visitatore apre quella pagina, il codice può rubare informazioni come le credenziali di accesso o i cookie di sessione.", advice:"Filtra sempre i contenuti inseriti dagli utenti prima di mostrarli sulla pagina. I moderni framework web hanno protezioni integrate: usale." },
+  95:  { danger_level:"Alto",  explanation_it:"Immagina qualcuno che bussa alla porta di servizio di un magazzino, fingendo di essere un corriere, per poi lasciare un pacco che contiene qualcosa di pericoloso. Questo attacco sfrutta il protocollo SMB, usato per condividere file in rete, per tentare di installare software malevolo nel sistema. È una tecnica molto usata da ransomware famosi come WannaCry.", advice:"Blocca la porta 445 nel firewall se non è necessaria. Aggiorna sempre il sistema operativo per chiudere le vulnerabilità note." },
+  96:  { danger_level:"Alto",  explanation_it:"Una shell backdoor è come una porta segreta installata in casa tua a tua insaputa. L'attaccante cerca di creare un canale segreto attraverso cui potrà entrare nel sistema quando vuole, senza bisogno di credenziali. Una volta stabilita, questa connessione gli dà controllo totale sul dispositivo compromesso.", advice:"Monitora le connessioni di rete insolite. Usa un firewall che blocchi connessioni in uscita non autorizzate e analizza regolarmente i processi in esecuzione." },
+  97:  { danger_level:"Alto",  explanation_it:"Immagina qualcuno che, dopo essere entrato in una stanza, comincia a dare ordini al sistema come se fosse il proprietario. L'attaccante sta cercando di inserire comandi di sistema direttamente tramite l'interfaccia del honeypot, tentando di scaricare ed eseguire programmi malevoli. Il comando 'wget' indica il tentativo di scaricare qualcosa da internet.", advice:"Limita i comandi eseguibili dal sistema. Usa il principio del minimo privilegio: ogni servizio dovrebbe avere solo i permessi strettamente necessari." },
+  98:  { danger_level:"Medio", explanation_it:"Il protocollo FTP è come una vecchia cassetta postale senza serratura. L'attaccante sta provando ad accedere al servizio di trasferimento file con credenziali anonime, cercando di leggere o caricare file senza autorizzazione. FTP trasmette dati in chiaro, il che lo rende particolarmente vulnerabile.", advice:"Sostituisci FTP con SFTP che cifra la comunicazione. Se FTP è necessario, disabilita l'accesso anonimo e limita gli IP autorizzati." },
+  99:  { danger_level:"Alto",  explanation_it:"Lo stesso attaccante dell'Austria continua a provare. Questo comportamento ripetuto indica un attacco automatizzato con strumenti appositi. I bot moderni possono fare migliaia di tentativi all'ora, provando liste di password comuni scaricabili da internet. La persistenza dell'attacco suggerisce che l'attaccante è determinato.", advice:"Implementa un sistema di blocco automatico dopo N tentativi falliti (fail2ban). Cambia la porta SSH predefinita per ridurre il numero di attacchi automatici." },
+  100: { danger_level:"Alto",  explanation_it:"SMB è il linguaggio che i computer Windows usano per 'parlarsi' e condividere file. Questo attacco dalla Cina sfrutta vulnerabilità in questo protocollo per cercare di intrufolarsi nella rete. È lo stesso vettore di attacco usato da malware devastanti che hanno bloccato ospedali e aziende in tutto il mondo.", advice:"Aggiorna Windows immediatamente. Valuta di disabilitare SMBv1 che è obsoleto e pieno di vulnerabilità, mantenendo solo le versioni più recenti del protocollo." },
+  101: { danger_level:"Basso", explanation_it:"Pensa a qualcuno che cammina per il quartiere guardando ogni casa, annotando quali luci sono accese, dove sono le telecamere e quali porte sembrano deboli. Questo attacco di ricognizione dal Regno Unito non fa danni diretti, ma raccoglie informazioni sul sistema per pianificare attacchi futuri più mirati. L'user agent indica l'uso di strumenti automatici di scansione.", advice:"Nascondi le informazioni sulla versione del software nei banner e negli header HTTP. Meno informazioni dai, meno vulnerabilità possono sfruttare." },
+};
+
+// ── STATO ───────────────────────────────────────────────────────────────────
+let currentFilter = 'all';
+let map;
+
+// ── INIT ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  initStats();
+  initMap();
+  initChart();
+  renderTable(EVENTS);
+});
+
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('it-IT');
+}
+
+// ── STATISTICHE ─────────────────────────────────────────────────────────────
+function initStats() {
+  const total    = EVENTS.length;
+  const high     = Object.values(EXPLANATIONS).filter(e => e.danger_level === 'Alto').length;
+  const medium   = Object.values(EXPLANATIONS).filter(e => e.danger_level === 'Medio').length;
+  const countries = new Set(EVENTS.map(e => e.country)).size;
+
+  animateCount('stat-total',    total);
+  animateCount('stat-high',     high);
+  animateCount('stat-medium',   medium);
+  animateCount('stat-countries',countries);
+}
+
+function animateCount(id, target) {
+  const el = document.getElementById(id);
+  let current = 0;
+  const step = Math.ceil(target / 30);
+  const timer = setInterval(() => {
+    current = Math.min(current + step, target);
+    el.textContent = current;
+    if (current >= target) clearInterval(timer);
+  }, 40);
+}
+
+// ── MAPPA ───────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: true, scrollWheelZoom: false });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Raggruppa per coordinate
+  const groups = {};
+  EVENTS.forEach(ev => {
+    const key = `${ev.lat},${ev.lon}`;
+    if (!groups[key]) groups[key] = { ev, count: 0 };
+    groups[key].count++;
+  });
+
+  // Aggiungi marker
+  Object.values(groups).forEach(({ ev, count }) => {
+    const exp    = EXPLANATIONS[ev.id];
+    const danger = exp ? exp.danger_level : 'Basso';
+    const color  = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+    const size   = Math.min(8 + count * 4, 24);
+
+    const icon = L.divIcon({
+      html: `<div style="
+        width:${size}px; height:${size}px;
+        background:${color};
+        border-radius:50%;
+        border:2px solid rgba(255,255,255,0.3);
+        box-shadow:0 0 ${size}px ${color}88;
+        animation: pulse-marker 2s ease-in-out infinite;
+      "></div>`,
+      className: '',
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2],
+    });
+
+    L.marker([ev.lat, ev.lon], { icon })
+      .addTo(map)
+      .bindPopup(`
+        <div style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
+          <div style="color:#fff; font-size:14px; margin-bottom:6px;">${ev.attack_type}</div>
+          <div>🌐 ${ev.ip}</div>
+          <div>📍 ${ev.city}, ${ev.country}</div>
+          <div>🔌 ${ev.service.toUpperCase()}</div>
+          <div style="margin-top:6px; color:${color};">● ${danger.toUpperCase()}</div>
+        </div>
+      `, { className: 'dark-popup' });
+  });
+
+  // Centra mappa sugli attacchi
+  const lats = EVENTS.map(e => e.lat);
+  const lons = EVENTS.map(e => e.lon);
+  map.fitBounds([[Math.min(...lats)-5, Math.min(...lons)-5],
+                 [Math.max(...lats)+5, Math.max(...lons)+5]]);
+}
+
+// ── GRAFICO DONUT ────────────────────────────────────────────────────────────
+function initChart() {
+  const counts = {};
+  EVENTS.forEach(ev => {
+    counts[ev.attack_type] = (counts[ev.attack_type] || 0) + 1;
+  });
+
+  const sorted  = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const labels  = sorted.map(([k]) => k);
+  const data    = sorted.map(([,v]) => v);
+  const colors  = [
+    '#ff3355','#ff6b35','#ffaa00','#00aaff',
+    '#aa55ff','#00ff88','#ff55aa','#55ffaa'
+  ];
+
+  new Chart(document.getElementById('attackChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors.slice(0, labels.length).map(c => c + '99'),
+        borderColor:     colors.slice(0, labels.length),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: { legend: { display: false } },
+      animation: { duration: 800 },
+    }
+  });
+
+  // Legenda custom
+  const legend = document.getElementById('chartLegend');
+  sorted.forEach(([name, count], i) => {
+    legend.innerHTML += `
+      <div class="legend-item">
+        <div class="legend-left">
+          <div class="legend-dot" style="background:${colors[i]};"></div>
+          <span class="legend-name">${name}</span>
+        </div>
+        <span class="legend-count">${count}</span>
+      </div>`;
+  });
+}
+
+// ── TABELLA ──────────────────────────────────────────────────────────────────
+function renderTable(events) {
+  const tbody = document.getElementById('eventsBody');
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nessun evento trovato</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = events.map(ev => {
+    const exp    = EXPLANATIONS[ev.id];
+    const danger = exp ? exp.danger_level : '—';
+    const ts     = new Date(ev.timestamp).toLocaleString('it-IT');
+
+    const badgeClass = danger === 'Alto' ? 'badge-danger' :
+                       danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+    const dangerIcon = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
+
+    return `<tr onclick="openModal(${ev.id})">
+      <td><span class="badge ${badgeClass}">${dangerIcon} ${danger}</span></td>
+      <td class="attack-type">${ev.attack_type}</td>
+      <td class="ip-text">${ev.ip}</td>
+      <td class="country-text">🌍 ${ev.country}</td>
+      <td><span class="service-text">${ev.service.toUpperCase()}</span></td>
+      <td class="country-text">${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterEvents(level, btn) {
+  currentFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const filtered = level === 'all' ? EVENTS : EVENTS.filter(ev => {
+    const exp = EXPLANATIONS[ev.id];
+    return exp && exp.danger_level === level;
+  });
+  renderTable(filtered);
+}
+
+// ── MODAL ────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const ev  = EVENTS.find(e => e.id === id);
+  const exp = EXPLANATIONS[id];
+  if (!ev) return;
+
+  document.getElementById('modalTitle').textContent = ev.attack_type;
+
+  const danger     = exp ? exp.danger_level : '—';
+  const badgeClass = danger === 'Alto' ? 'badge-danger' :
+                     danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+  const ts         = new Date(ev.timestamp).toLocaleString('it-IT');
+
+  document.getElementById('modalMeta').innerHTML = `
+    <div class="meta-chip">🌐 IP: <span>${ev.ip}</span></div>
+    <div class="meta-chip">📍 <span>${ev.city}, ${ev.country}</span></div>
+    <div class="meta-chip">🔌 <span>${ev.service.toUpperCase()}</span></div>
+    <div class="meta-chip">📅 <span>${ts}</span></div>
+    <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${danger}</span></div>
+  `;
+
+  if (exp) {
+    document.getElementById('modalContent').innerHTML = `
+      <div class="ai-section">
+        <div class="ai-label">🤖 SPIEGAZIONE AI — COSA STA SUCCEDENDO</div>
+        <div class="ai-text">${exp.explanation_it}</div>
+      </div>
+      <div class="advice-section">
+        <div class="advice-label">💡 COME DIFENDERSI</div>
+        <div class="advice-text">${exp.advice}</div>
+      </div>`;
+  } else {
+    document.getElementById('modalContent').innerHTML =
+      '<div class="no-explanation">Spiegazione AI non ancora disponibile per questo evento.</div>';
+  }
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+
+function closeModalDirect() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModalDirect();
+});
+</script>
+
+<!-- Stile popup mappa -->
+<style>
+.dark-popup .leaflet-popup-content-wrapper {
+  background: #0d1117;
+  border: 1px solid #1a2332;
+  color: #c9d1d9;
+  border-radius: 8px;
+}
+.dark-popup .leaflet-popup-tip { background: #0d1117; }
+</style>
+
+</body>
+</html>

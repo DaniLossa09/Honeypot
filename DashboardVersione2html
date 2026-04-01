@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoneypotX — Cyber Threat Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #080c10;
+    --surface:  #0d1117;
+    --border:   #1a2332;
+    --accent:   #00ff88;
+    --accent2:  #00aaff;
+    --danger:   #ff3355;
+    --warn:     #ffaa00;
+    --safe:     #00ff88;
+    --text:     #c9d1d9;
+    --muted:    #4a5568;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-head: 'Rajdhani', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,17,23,0.97);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 12px rgba(0,255,136,0.3);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 12px rgba(0,255,136,0.3); }
+    50%       { box-shadow: 0 0 28px rgba(0,255,136,0.7); }
+  }
+
+  .logo-text {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+  }
+  .logo-text span { color: var(--accent); }
+
+  .header-right { display: flex; align-items: center; gap: 16px; }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.2; }
+  }
+
+  .timestamp { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+  /* ── SIMULATE BUTTON ── */
+  .sim-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, rgba(255,51,85,0.15), rgba(255,170,0,0.1));
+    border: 1px solid rgba(255,51,85,0.4);
+    color: var(--danger);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sim-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,51,85,0.1);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s;
+  }
+
+  .sim-btn:hover::before { transform: scaleX(1); }
+  .sim-btn:hover { border-color: var(--danger); box-shadow: 0 0 16px rgba(255,51,85,0.3); }
+
+  .sim-btn.firing {
+    animation: btn-flash 0.4s ease;
+    border-color: var(--danger);
+    box-shadow: 0 0 24px rgba(255,51,85,0.5);
+  }
+
+  @keyframes btn-flash {
+    0%   { background: rgba(255,51,85,0.4); }
+    100% { background: rgba(255,51,85,0.1); }
+  }
+
+  /* ── ALERT BANNER ── */
+  .alert-banner {
+    position: fixed;
+    top: 70px; right: 24px;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 340px;
+  }
+
+  .alert-toast {
+    background: rgba(255,51,85,0.12);
+    border: 1px solid rgba(255,51,85,0.4);
+    border-left: 3px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    animation: toast-in 0.3s ease, toast-out 0.4s ease 4s forwards;
+    backdrop-filter: blur(8px);
+  }
+
+  .alert-toast .alert-title { color: var(--danger); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(30px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes toast-out {
+    to { opacity: 0; transform: translateX(30px); }
+  }
+
+  /* ── LAYOUT ── */
+  main {
+    position: relative;
+    z-index: 1;
+    padding: 20px 32px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* ── STAT CARDS ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.2s;
+    cursor: default;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.danger::before  { background: linear-gradient(90deg, var(--danger), transparent); }
+  .stat-card.warn::before    { background: linear-gradient(90deg, var(--warn), transparent); }
+  .stat-card.safe::before    { background: linear-gradient(90deg, var(--safe), transparent); }
+  .stat-card.info::before    { background: linear-gradient(90deg, var(--accent2), transparent); }
+
+  .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+  .stat-card.flash-attack {
+    animation: card-flash 0.6s ease;
+  }
+
+  @keyframes card-flash {
+    0%   { border-color: var(--danger); box-shadow: 0 0 20px rgba(255,51,85,0.4); }
+    100% { border-color: var(--border); box-shadow: none; }
+  }
+
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-family: var(--font-head); font-size: 42px; font-weight: 700; line-height: 1; color: #fff; }
+  .stat-value.danger { color: var(--danger); }
+  .stat-value.warn   { color: var(--warn); }
+  .stat-value.safe   { color: var(--safe); }
+  .stat-value.info   { color: var(--accent2); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── MIDDLE ROW ── */
+  .middle-row {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-title {
+    font-family: var(--font-head); font-size: 13px; font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase; color: #fff;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-title .dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: blink 1.2s ease-in-out infinite; }
+
+  /* ── MAP ── */
+  #map { height: 380px; background: #0a0e14; }
+  .leaflet-container { background: #0a0e14 !important; }
+
+  /* ── ATTACK LINE CANVAS ── */
+  #attack-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 400;
+  }
+
+  /* ── CHART ── */
+  .chart-wrap { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  #attackChart { max-height: 200px; }
+  .legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+  .legend-left { display: flex; align-items: center; gap: 8px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .legend-name { color: var(--text); }
+  .legend-count { font-family: var(--font-mono); color: var(--accent); font-size: 11px; }
+
+  /* ── AI INSIGHTS PANEL ── */
+  .ai-insights-card {
+    background: var(--surface);
+    border: 1px solid rgba(0,255,136,0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .ai-insights-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent));
+    background-size: 200% 100%;
+    animation: gradient-slide 3s linear infinite;
+  }
+
+  @keyframes gradient-slide {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+
+  .ai-insights-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+  }
+
+  .ai-insight-col {
+    padding: 20px 24px;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .ai-insight-col:last-child { border-right: none; }
+
+  .ai-col-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .ai-col-label.attack-label  { color: var(--danger); }
+  .ai-col-label.risk-label    { color: var(--warn); }
+  .ai-col-label.advice-label  { color: var(--accent2); }
+
+  .ai-col-content { font-size: 13px; line-height: 1.6; color: var(--text); }
+
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .risk-high   { background: rgba(255,51,85,0.15);  color: var(--danger); border: 1px solid rgba(255,51,85,0.4); }
+  .risk-medium { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.4); }
+  .risk-low    { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
+
+  .ai-typing::after {
+    content: '▋';
+    animation: cursor-blink 0.8s step-end infinite;
+    color: var(--accent);
+  }
+
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  /* ── BOTTOM ROW ── */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  /* ── TABELLA ── */
+  .events-controls { display: flex; align-items: center; gap: 10px; }
+
+  .filter-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,136,0.05);
+  }
+
+  .events-table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(26,35,50,0.5);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(0,255,136,0.04); }
+
+  tbody tr.new-row {
+    animation: row-flash 1.5s ease forwards;
+  }
+
+  @keyframes row-flash {
+    0%   { background: rgba(255,51,85,0.15); }
+    100% { background: transparent; }
+  }
+
+  tbody td { padding: 10px 16px; vertical-align: middle; }
+
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  .badge-danger { background: rgba(255,51,85,0.15);  color: var(--danger); border: 1px solid rgba(255,51,85,0.3); }
+  .badge-warn   { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.3); }
+  .badge-safe   { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
+
+  .attack-type { font-weight: 500; color: #fff; }
+  .ip-text { font-family: var(--font-mono); font-size: 12px; color: var(--accent2); }
+  .country-text { color: var(--muted); font-size: 12px; }
+  .service-text { font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--border); padding: 2px 8px; border-radius: 4px; }
+
+  /* ── LIVE FEED ── */
+  .live-feed-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .feed-list {
+    padding: 8px 0;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+
+  .feed-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(26,35,50,0.4);
+    cursor: pointer;
+    transition: background 0.15s;
+    animation: feed-slide 0.4s ease;
+  }
+
+  .feed-item:hover { background: rgba(0,255,136,0.03); }
+
+  @keyframes feed-slide {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .feed-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .feed-info { flex: 1; }
+  .feed-attack { font-size: 12px; color: #fff; font-weight: 500; }
+  .feed-detail { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .feed-country { font-size: 11px; margin-top: 2px; color: var(--accent2); }
+
+  .feed-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 680px;
+    max-height: 88vh;
+    overflow-y: auto;
+    position: relative;
+    animation: modal-in 0.25s ease;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .modal-top-bar {
+    height: 3px;
+    background: linear-gradient(90deg, var(--danger), var(--warn), var(--accent2));
+  }
+
+  .modal-header {
+    padding: 20px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  }
+
+  .modal-attack-type { font-family: var(--font-head); font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+  .modal-source { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 4px; letter-spacing: 1px; }
+
+  .modal-close {
+    background: none; border: none; color: var(--muted); font-size: 20px;
+    cursor: pointer; padding: 4px; line-height: 1; flex-shrink: 0; transition: color 0.2s;
+  }
+
+  .modal-close:hover { color: #fff; }
+  .modal-body { padding: 24px 28px; }
+
+  .modal-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+
+  .meta-chip {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+  }
+
+  .meta-chip span { color: var(--text); }
+
+  .ai-section {
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.15);
+    border-radius: 12px; padding: 20px; margin-bottom: 14px;
+  }
+
+  .ai-label {
+    font-family: var(--font-mono); font-size: 10px; color: var(--accent);
+    letter-spacing: 2px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+  }
+
+  .ai-text { font-size: 14px; line-height: 1.7; color: var(--text); }
+
+  .advice-section {
+    background: rgba(0,170,255,0.05);
+    border: 1px solid rgba(0,170,255,0.15);
+    border-radius: 12px; padding: 16px 20px;
+  }
+
+  .advice-label {
+    font-family: var(--font-mono); font-size: 10px; color: var(--accent2);
+    letter-spacing: 2px; margin-bottom: 8px;
+  }
+
+  .advice-text { font-size: 13px; line-height: 1.6; color: var(--text); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1100px) {
+    .ai-insights-inner { grid-template-columns: 1fr 1fr; }
+    .ai-insight-col:last-child { border-top: 1px solid var(--border); grid-column: 1/-1; }
+  }
+
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .middle-row, .bottom-row { grid-template-columns: 1fr; }
+    .ai-insights-inner { grid-template-columns: 1fr; }
+    main { padding: 14px; }
+    header { padding: 12px 16px; }
+  }
+
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
+
+  /* Map popup */
+  .dark-popup .leaflet-popup-content-wrapper {
+    background: #0d1117; border: 1px solid #1a2332; color: #c9d1d9; border-radius: 8px;
+  }
+  .dark-popup .leaflet-popup-tip { background: #0d1117; }
+
+  /* Leaflet map container position fix */
+  .map-container-wrap { position: relative; }
+</style>
+</head>
+<body>
+
+<div class="alert-banner" id="alertBanner"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🍯</div>
+    <div class="logo-text">Honeypot<span>X</span></div>
+  </div>
+  <div class="header-right">
+    <button class="sim-btn" id="simBtn" onclick="triggerSimulatedAttack()">
+      ⚡ SIMULA ATTACCO
+    </button>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      MONITORING ACTIVE
+    </div>
+    <div class="timestamp" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPI CARDS -->
+  <div class="stats-row">
+    <div class="stat-card danger" id="card-total">
+      <div class="stat-label">⚡ Attacchi Totali</div>
+      <div class="stat-value danger" id="stat-total">0</div>
+      <div class="stat-sub">eventi rilevati</div>
+    </div>
+    <div class="stat-card danger" id="card-high">
+      <div class="stat-label">🔴 Pericolo Alto</div>
+      <div class="stat-value danger" id="stat-high">0</div>
+      <div class="stat-sub">richiedono attenzione</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-label">🟡 Pericolo Medio</div>
+      <div class="stat-value warn" id="stat-medium">0</div>
+      <div class="stat-sub">da monitorare</div>
+    </div>
+    <div class="stat-card info">
+      <div class="stat-label">🌍 Paesi Attaccanti</div>
+      <div class="stat-value info" id="stat-countries">0</div>
+      <div class="stat-sub">origini uniche</div>
+    </div>
+  </div>
+
+  <!-- MAPPA + DONUT -->
+  <div class="middle-row">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">🎯 Target: IT — Brescia</span>
+      </div>
+      <div class="map-container-wrap">
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> TIPO ATTACCO</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="attackChart"></canvas>
+        <div class="legend" id="chartLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI INSIGHTS PANEL (always visible) -->
+  <div class="ai-insights-card" id="aiInsightsCard">
+    <div class="card-header">
+      <div class="card-title"><div class="dot"></div> 🧠 AI INSIGHTS — ULTIMO ATTACCO RILEVATO</div>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">ANALISI IN TEMPO REALE</span>
+    </div>
+    <div class="ai-insights-inner">
+      <div class="ai-insight-col">
+        <div class="ai-col-label attack-label">⚠️ ATTACCO RILEVATO</div>
+        <div class="ai-col-content" id="ai-attack">—</div>
+      </div>
+      <div class="ai-insight-col">
+        <div class="ai-col-label risk-label">📊 LIVELLO RISCHIO</div>
+        <div class="ai-col-content" id="ai-risk">—</div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6;" id="ai-explanation">—</div>
+      </div>
+      <div class="ai-insight-col">
+        <div class="ai-col-label advice-label">💡 COME DIFENDERSI</div>
+        <div class="ai-col-content" id="ai-advice">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABELLA + LIVE FEED -->
+  <div class="bottom-row">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> EVENTI RILEVATI</div>
+        <div class="events-controls">
+          <button class="filter-btn active" onclick="filterEvents('all', this)">TUTTI</button>
+          <button class="filter-btn" onclick="filterEvents('Alto', this)">🔴 ALTO</button>
+          <button class="filter-btn" onclick="filterEvents('Medio', this)">🟡 MEDIO</button>
+          <button class="filter-btn" onclick="filterEvents('Basso', this)">🟢 BASSO</button>
+        </div>
+      </div>
+      <div class="events-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pericolo</th>
+              <th>Tipo Attacco</th>
+              <th>IP Attaccante</th>
+              <th>Paese</th>
+              <th>Servizio</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="eventsBody">
+            <tr><td colspan="6" class="empty">Caricamento dati...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LIVE FEED -->
+    <div class="live-feed-card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> 🔥 LIVE ATTACK FEED</div>
+      </div>
+      <div class="feed-list" id="feedList"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODAL AI -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-top-bar"></div>
+    <div class="modal-header">
+      <div>
+        <div class="modal-attack-type" id="modalTitle">—</div>
+        <div class="modal-source" id="modalSource">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta" id="modalMeta"></div>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATI ────────────────────────────────────────────────────────────────────
+const TARGET_LAT = 45.54;
+const TARGET_LON = 10.22;
+
+const BASE_EVENTS = [
+  { id:91,  timestamp:"2026-03-31T10:00:00", source:"cowrie",     ip:"185.234.219.12", port:22,  service:"ssh",   attack_type:"Brute Force",       country:"Austria",        city:"Vienna",      lat:48.2,  lon:16.3,   flag:"🇦🇹" },
+  { id:92,  timestamp:"2026-03-31T11:00:00", source:"opencanary", ip:"45.33.32.156",   port:80,  service:"http",  attack_type:"SQL Injection",     country:"United States",  city:"Fremont",     lat:37.5,  lon:-121.9, flag:"🇺🇸" },
+  { id:94,  timestamp:"2026-03-31T11:10:00", source:"opencanary", ip:"104.21.56.89",   port:80,  service:"http",  attack_type:"XSS Attack",        country:"Canada",         city:"Toronto",     lat:43.7,  lon:-79.4,  flag:"🇨🇦" },
+  { id:95,  timestamp:"2026-03-31T12:00:00", source:"dionaea",    ip:"77.88.55.60",    port:445, service:"smb",   attack_type:"Malware Upload",    country:"Russia",         city:"Moscow",      lat:55.7,  lon:37.6,   flag:"🇷🇺" },
+  { id:96,  timestamp:"2026-03-31T12:05:00", source:"dionaea",    ip:"1.2.3.4",        port:4444,service:"shell", attack_type:"Malware Upload",    country:"Australia",      city:"Sydney",      lat:-33.8, lon:151.2,  flag:"🇦🇺" },
+  { id:97,  timestamp:"2026-03-31T10:05:00", source:"cowrie",     ip:"91.108.4.3",     port:22,  service:"ssh",   attack_type:"Command Injection",  country:"Germany",        city:"Berlin",      lat:52.5,  lon:13.4,   flag:"🇩🇪" },
+  { id:98,  timestamp:"2026-03-31T13:00:00", source:"opencanary", ip:"198.51.100.7",   port:21,  service:"ftp",   attack_type:"FTP Attack",        country:"Brazil",         city:"São Paulo",   lat:-23.5, lon:-46.6,  flag:"🇧🇷" },
+  { id:99,  timestamp:"2026-03-31T13:30:00", source:"cowrie",     ip:"185.234.219.12", port:22,  service:"ssh",   attack_type:"Brute Force",       country:"Austria",        city:"Vienna",      lat:48.2,  lon:16.3,   flag:"🇦🇹" },
+  { id:100, timestamp:"2026-03-31T14:00:00", source:"dionaea",    ip:"5.188.206.14",   port:445, service:"smb",   attack_type:"SMB Attack",        country:"China",          city:"Shanghai",    lat:31.2,  lon:121.5,  flag:"🇨🇳" },
+  { id:101, timestamp:"2026-03-31T14:30:00", source:"opencanary", ip:"212.58.246.90",  port:80,  service:"http",  attack_type:"Web Crawl / Recon", country:"United Kingdom",  city:"London",      lat:51.5,  lon:-0.1,   flag:"🇬🇧" },
+];
+
+const EXTRA_ATTACKS = [
+  { id:200, source:"cowrie",     ip:"103.45.67.89",  port:22,  service:"ssh",   attack_type:"Brute Force",       country:"China",         city:"Beijing",       lat:39.9,  lon:116.4, flag:"🇨🇳" },
+  { id:201, source:"opencanary", ip:"91.210.12.50",  port:80,  service:"http",  attack_type:"SQL Injection",     country:"Romania",        city:"Bucharest",     lat:44.4,  lon:26.1,  flag:"🇷🇴" },
+  { id:202, source:"dionaea",    ip:"195.54.160.2",  port:445, service:"smb",   attack_type:"Malware Upload",    country:"Ukraine",        city:"Kyiv",          lat:50.4,  lon:30.5,  flag:"🇺🇦" },
+  { id:203, source:"cowrie",     ip:"46.232.255.28", port:22,  service:"ssh",   attack_type:"Dictionary Attack", country:"Netherlands",    city:"Amsterdam",     lat:52.3,  lon:4.9,   flag:"🇳🇱" },
+  { id:204, source:"opencanary", ip:"5.34.180.200",  port:3306,service:"mysql", attack_type:"MySQL Probe",       country:"France",         city:"Paris",         lat:48.8,  lon:2.3,   flag:"🇫🇷" },
+  { id:205, source:"cowrie",     ip:"210.65.88.3",   port:22,  service:"ssh",   attack_type:"Brute Force",       country:"South Korea",    city:"Seoul",         lat:37.5,  lon:127.0, flag:"🇰🇷" },
+  { id:206, source:"dionaea",    ip:"41.63.0.5",     port:445, service:"smb",   attack_type:"Ransomware Probe",  country:"Nigeria",        city:"Lagos",         lat:6.5,   lon:3.4,   flag:"🇳🇬" },
+  { id:207, source:"opencanary", ip:"200.115.117.1", port:80,  service:"http",  attack_type:"XSS Attack",        country:"Argentina",      city:"Buenos Aires",  lat:-34.6, lon:-58.4, flag:"🇦🇷" },
+];
+
+const EXPLANATIONS = {
+  91:  { danger_level:"Alto",  explanation_it:"Immagina un ladro che prova migliaia di chiavi diverse sulla tua porta, una dopo l'altra. Questo attacco tenta combinazioni di username e password sul servizio SSH, tramite software automatici capaci di centinaia di tentativi al minuto.", advice:"Usa password complesse. Attiva l'autenticazione a due fattori: anche con la password corretta, l'attaccante non potrebbe accedere." },
+  92:  { danger_level:"Alto",  explanation_it:"Un SQL Injection è come ingannare il sistema di sicurezza di un edificio per aprire tutti i cassetti. L'attaccante inserisce comandi nascosti per manipolare il database e ottenere dati riservati o il controllo del sistema.", advice:"Non fidarti mai degli input utente senza sanificarli. Usa query preparate nel codice e mantieni il software aggiornato." },
+  94:  { danger_level:"Medio", explanation_it:"Un attacco XSS è come lasciare un biglietto trappola per altri visitatori. Il codice malevolo inserito nella pagina viene eseguito da altri utenti, rubando credenziali o cookie di sessione.", advice:"Filtra tutti i contenuti inseriti dagli utenti. I moderni framework hanno protezioni XSS integrate: usale." },
+  95:  { danger_level:"Alto",  explanation_it:"Questo attacco usa il protocollo SMB, usato per condividere file in rete, per installare software malevolo. È la stessa tecnica usata dal famigerato ransomware WannaCry che ha bloccato ospedali in tutto il mondo.", advice:"Blocca la porta 445 nel firewall se non necessaria. Aggiorna sempre il sistema operativo per chiudere le vulnerabilità note." },
+  96:  { danger_level:"Alto",  explanation_it:"Una shell backdoor è una porta segreta installata nel sistema. L'attaccante crea un canale segreto per accedere quando vuole, ottenendo controllo totale sul dispositivo.", advice:"Monitora le connessioni di rete insolite. Usa un firewall che blocchi connessioni in uscita non autorizzate." },
+  97:  { danger_level:"Alto",  explanation_it:"L'attaccante inserisce comandi di sistema direttamente tramite l'interfaccia del honeypot, tentando di scaricare ed eseguire programmi malevoli con comandi come 'wget'.", advice:"Limita i comandi eseguibili dal sistema. Usa il principio del minimo privilegio per ogni servizio." },
+  98:  { danger_level:"Medio", explanation_it:"FTP è un protocollo vecchio senza crittografia. L'attaccante tenta accesso con credenziali anonime per leggere o caricare file senza autorizzazione.", advice:"Sostituisci FTP con SFTP. Se FTP è necessario, disabilita l'accesso anonimo e limita gli IP autorizzati." },
+  99:  { danger_level:"Alto",  explanation_it:"Lo stesso attaccante dell'Austria continua i tentativi. Questo comportamento persistente indica un attacco automatizzato avanzato, con bot capaci di migliaia di tentativi all'ora.", advice:"Implementa fail2ban per bloccare automaticamente IP dopo N tentativi falliti. Cambia la porta SSH predefinita." },
+  100: { danger_level:"Alto",  explanation_it:"SMB è il linguaggio che i sistemi Windows usano per condividere file. Questo attacco dalla Cina sfrutta vulnerabilità di questo protocollo, usato da malware devastanti in tutto il mondo.", advice:"Aggiorna Windows immediatamente. Disabilita SMBv1, obsoleto e pieno di vulnerabilità." },
+  101: { danger_level:"Basso", explanation_it:"Come qualcuno che cammina per il quartiere annotando porte deboli, questo attacco di ricognizione raccoglie informazioni per pianificare attacchi futuri più mirati.", advice:"Nascondi le versioni software nei banner e negli header HTTP. Meno info dai, meno superfice d'attacco esponi." },
+  200: { danger_level:"Alto",  explanation_it:"Attacco brute force massiccio dalla Cina. Sistemi automatizzati tentano migliaia di combinazioni password ogni ora sul servizio SSH.", advice:"Disabilita l'accesso SSH con password. Usa solo autenticazione a chiave pubblica." },
+  201: { danger_level:"Alto",  explanation_it:"SQL Injection dalla Romania. L'attaccante cerca di manipolare le query del database per estrarre dati sensibili o ottenere accesso amministrativo.", advice:"Implementa un Web Application Firewall (WAF) e usa prepared statements in tutto il codice." },
+  202: { danger_level:"Alto",  explanation_it:"Tentativo di upload malware tramite SMB dall'Ucraina. Il file potrebbe contenere ransomware o backdoor per accesso persistente al sistema.", advice:"Monitora i trasferimenti file e implementa scansione antivirus in tempo reale sulle condivisioni SMB." },
+  203: { danger_level:"Medio", explanation_it:"Attacco dizionario SSH dai Paesi Bassi. Usa liste di password comuni scaricate da leak database per trovare credenziali valide.", advice:"Usa password casuali di almeno 20 caratteri. Considera un password manager aziendale." },
+  204: { danger_level:"Medio", explanation_it:"Scansione del servizio MySQL dalla Francia. L'attaccante cerca database esposti con credenziali deboli o di default.", advice:"Non esporre MySQL su internet. Usa tunnel SSH o VPN per l'accesso remoto ai database." },
+  205: { danger_level:"Alto",  explanation_it:"Brute force SSH dalla Corea del Sud con frequenza elevata, indicando l'uso di botnet coordinate. Potenziale preludio a un attacco più sofisticato.", advice:"Implementa rate limiting sulle connessioni SSH e usa Geo-blocking per paesi non necessari." },
+  206: { danger_level:"Alto",  explanation_it:"Probe ransomware dalla Nigeria. Il pattern di scansione corrisponde a tecniche usate da gruppi ransomware noti come LockBit e Conti.", advice:"Mantieni backup offline aggiornati. Segmenta la rete per limitare la diffusione in caso di compromissione." },
+  207: { danger_level:"Medio", explanation_it:"Attacco XSS dall'Argentina tramite form web. Il codice iniettato potrebbe essere usato per rubare sessioni o reindirizzare utenti.", advice:"Implementa Content Security Policy (CSP) nel server web. Sanitizza tutti gli input utente lato server." },
+};
+
+let EVENTS = [...BASE_EVENTS];
+let currentFilter = 'all';
+let map;
+let attackLines = [];
+let donutChart;
+let nextId = 300;
+let liveInterval;
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  initStats();
+  initMap();
+  initChart();
+  renderTable(EVENTS);
+  initFeed();
+  updateAIInsights(EVENTS[0]);
+
+  // Live mode: new attack every 6 seconds
+  liveInterval = setInterval(autoSimulateAttack, 6000);
+});
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('it-IT');
+}
+
+// ── STATS ──────────────────────────────────────────────────────────────────
+function initStats() {
+  const total    = EVENTS.length;
+  const high     = EVENTS.filter(e => EXPLANATIONS[e.id]?.danger_level === 'Alto').length;
+  const medium   = EVENTS.filter(e => EXPLANATIONS[e.id]?.danger_level === 'Medio').length;
+  const countries = new Set(EVENTS.map(e => e.country)).size;
+  animateCount('stat-total',     total);
+  animateCount('stat-high',      high);
+  animateCount('stat-medium',    medium);
+  animateCount('stat-countries', countries);
+}
+
+function animateCount(id, target) {
+  const el = document.getElementById(id);
+  const current = parseInt(el.textContent) || 0;
+  const diff = target - current;
+  if (diff === 0) return;
+  const steps = 25;
+  let i = 0;
+  const timer = setInterval(() => {
+    i++;
+    el.textContent = Math.round(current + (diff * i / steps));
+    if (i >= steps) { el.textContent = target; clearInterval(timer); }
+  }, 30);
+}
+
+function flashCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('flash-attack');
+  void el.offsetWidth;
+  el.classList.add('flash-attack');
+}
+
+// ── MAP ────────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: true, scrollWheelZoom: false });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Server target marker
+  const targetIcon = L.divIcon({
+    html: `<div style="
+      width:14px;height:14px;
+      background:#00ff88;
+      border-radius:50%;
+      border:2px solid #fff;
+      box-shadow:0 0 16px #00ff88, 0 0 32px rgba(0,255,136,0.4);
+    "></div>`,
+    className: '', iconSize: [14,14], iconAnchor: [7,7]
+  });
+  L.marker([TARGET_LAT, TARGET_LON], { icon: targetIcon })
+    .addTo(map)
+    .bindPopup(`<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#c9d1d9;">
+      <div style="color:#00ff88;margin-bottom:4px;">🛡️ SERVER TARGET</div>
+      <div>📍 Brescia, Italia</div>
+      <div>🟢 Sistema Protetto</div>
+    </div>`, { className: 'dark-popup' });
+
+  renderMapMarkers();
+  map.setView([30, 20], 2);
+}
+
+function renderMapMarkers() {
+  // Group by coords
+  const groups = {};
+  EVENTS.forEach(ev => {
+    const key = `${ev.lat},${ev.lon}`;
+    if (!groups[key]) groups[key] = { ev, count: 0 };
+    groups[key].count++;
+  });
+
+  Object.values(groups).forEach(({ ev, count }) => {
+    const exp    = EXPLANATIONS[ev.id];
+    const danger = exp ? exp.danger_level : 'Basso';
+    const color  = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+    const size   = Math.min(8 + count * 4, 22);
+
+    const icon = L.divIcon({
+      html: `<div style="
+        width:${size}px;height:${size}px;
+        background:${color};
+        border-radius:50%;
+        border:2px solid rgba(255,255,255,0.25);
+        box-shadow:0 0 ${size}px ${color}88;
+        cursor:pointer;
+      "></div>`,
+      className: '', iconSize: [size,size], iconAnchor: [size/2,size/2],
+    });
+
+    L.marker([ev.lat, ev.lon], { icon })
+      .addTo(map)
+      .on('click', () => openModal(ev.id))
+      .bindPopup(`
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#c9d1d9;min-width:180px;">
+          <div style="color:#fff;font-size:14px;margin-bottom:6px;">${ev.flag || '🌐'} ${ev.attack_type}</div>
+          <div>🖥️ ${ev.ip}</div>
+          <div>📍 ${ev.city}, ${ev.country}</div>
+          <div>🔌 ${ev.service.toUpperCase()}</div>
+          <div style="margin-top:6px;color:${color};">● ${danger.toUpperCase()}</div>
+          <div style="margin-top:6px;color:#4a5568;font-size:10px;cursor:pointer;">Click per analisi AI →</div>
+        </div>`, { className: 'dark-popup' });
+  });
+}
+
+function drawAttackLine(ev, isNew) {
+  if (!map) return;
+  const exp    = EXPLANATIONS[ev.id];
+  const danger = exp ? exp.danger_level : 'Basso';
+  const color  = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+
+  const line = L.polyline(
+    [[ev.lat, ev.lon], [TARGET_LAT, TARGET_LON]],
+    { color, weight: isNew ? 2 : 1, opacity: isNew ? 0.9 : 0.35, dashArray: '6,8' }
+  ).addTo(map);
+
+  attackLines.push(line);
+
+  // Animate dash offset
+  let offset = 0;
+  const anim = setInterval(() => {
+    offset = (offset + 2) % 14;
+    line.setStyle({ dashOffset: -offset });
+  }, 60);
+
+  // Fade out old lines after 12s (new ones after 8s)
+  const timeout = isNew ? 8000 : 14000;
+  setTimeout(() => {
+    clearInterval(anim);
+    let op = isNew ? 0.9 : 0.35;
+    const fade = setInterval(() => {
+      op -= 0.05;
+      if (op <= 0) { clearInterval(fade); map.removeLayer(line); }
+      else line.setStyle({ opacity: op });
+    }, 100);
+  }, timeout);
+}
+
+function drawAllLines() {
+  EVENTS.forEach(ev => drawAttackLine(ev, false));
+}
+
+setTimeout(drawAllLines, 800);
+
+// ── CHART ──────────────────────────────────────────────────────────────────
+function initChart() {
+  const counts = {};
+  EVENTS.forEach(ev => { counts[ev.attack_type] = (counts[ev.attack_type] || 0) + 1; });
+  const sorted  = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const labels  = sorted.map(([k]) => k);
+  const data    = sorted.map(([,v]) => v);
+  const colors  = ['#ff3355','#ff6b35','#ffaa00','#00aaff','#aa55ff','#00ff88','#ff55aa','#55ffaa'];
+
+  donutChart = new Chart(document.getElementById('attackChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors.slice(0, labels.length).map(c => c+'88'), borderColor: colors.slice(0, labels.length), borderWidth: 2 }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: { legend: { display: false } },
+      animation: { duration: 800 },
+    }
+  });
+
+  const legend = document.getElementById('chartLegend');
+  sorted.forEach(([name, count], i) => {
+    legend.innerHTML += `<div class="legend-item">
+      <div class="legend-left">
+        <div class="legend-dot" style="background:${colors[i]};"></div>
+        <span class="legend-name">${name}</span>
+      </div>
+      <span class="legend-count">${count}</span>
+    </div>`;
+  });
+}
+
+// ── FEED ───────────────────────────────────────────────────────────────────
+function initFeed() {
+  const feedList = document.getElementById('feedList');
+  feedList.innerHTML = '';
+  [...EVENTS].slice(0, 12).reverse().forEach(ev => addToFeed(ev, false));
+}
+
+function addToFeed(ev, animate) {
+  const feedList = document.getElementById('feedList');
+  const exp    = EXPLANATIONS[ev.id];
+  const danger = exp ? exp.danger_level : 'Basso';
+  const color  = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+  const time   = new Date(ev.timestamp).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+
+  const item = document.createElement('div');
+  item.className = 'feed-item' + (animate ? '' : '');
+  item.innerHTML = `
+    <div class="feed-dot" style="background:${color};box-shadow:0 0 8px ${color}88;"></div>
+    <div class="feed-info">
+      <div class="feed-attack">${ev.flag || '🌐'} ${ev.attack_type}</div>
+      <div class="feed-detail">${ev.ip} · ${ev.service.toUpperCase()}</div>
+      <div class="feed-country">${ev.city}, ${ev.country}</div>
+    </div>
+    <div class="feed-time">${time}</div>
+  `;
+  item.addEventListener('click', () => openModal(ev.id));
+
+  if (animate) {
+    feedList.insertBefore(item, feedList.firstChild);
+    if (feedList.children.length > 20) feedList.removeChild(feedList.lastChild);
+  } else {
+    feedList.appendChild(item);
+  }
+}
+
+// ── AI INSIGHTS (always visible panel) ─────────────────────────────────────
+function updateAIInsights(ev) {
+  if (!ev) return;
+  const exp    = EXPLANATIONS[ev.id];
+  const danger = exp ? exp.danger_level : '—';
+  const color  = danger === 'Alto' ? 'high' : danger === 'Medio' ? 'medium' : 'low';
+  const icon   = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
+
+  document.getElementById('ai-attack').innerHTML =
+    `<strong style="color:#fff;font-size:14px;">${ev.attack_type}</strong><br>
+     <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">${ev.ip} · ${ev.flag||'🌐'} ${ev.country}</span>`;
+
+  document.getElementById('ai-risk').innerHTML =
+    `<span class="risk-badge risk-${color}">${icon} ${danger.toUpperCase()}</span>`;
+
+  const shortExp = exp?.explanation_it?.split('.')[0] + '.' || '—';
+  document.getElementById('ai-explanation').textContent = shortExp;
+
+  document.getElementById('ai-advice').innerHTML =
+    `<span style="font-size:13px;line-height:1.6;color:var(--text)">${exp?.advice || '—'}</span>`;
+
+  // Flash the AI card
+  const card = document.getElementById('aiInsightsCard');
+  card.style.borderColor = 'rgba(0,255,136,0.5)';
+  card.style.boxShadow   = '0 0 20px rgba(0,255,136,0.1)';
+  setTimeout(() => {
+    card.style.borderColor = '';
+    card.style.boxShadow   = '';
+  }, 1200);
+}
+
+// ── TABLE ──────────────────────────────────────────────────────────────────
+function renderTable(events, highlightFirst) {
+  const tbody = document.getElementById('eventsBody');
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nessun evento trovato</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = events.map((ev, idx) => {
+    const exp    = EXPLANATIONS[ev.id];
+    const danger = exp ? exp.danger_level : '—';
+    const ts     = new Date(ev.timestamp).toLocaleString('it-IT');
+    const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+    const dangerIcon = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
+    const newClass   = (highlightFirst && idx === 0) ? ' class="new-row"' : '';
+
+    return `<tr${newClass} onclick="openModal(${ev.id})">
+      <td><span class="badge ${badgeClass}">${dangerIcon} ${danger}</span></td>
+      <td class="attack-type">${ev.flag || '🌐'} ${ev.attack_type}</td>
+      <td class="ip-text">${ev.ip}</td>
+      <td class="country-text">${ev.city}, ${ev.country}</td>
+      <td><span class="service-text">${ev.service.toUpperCase()}</span></td>
+      <td class="country-text">${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterEvents(level, btn) {
+  currentFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = level === 'all' ? EVENTS : EVENTS.filter(ev => {
+    const exp = EXPLANATIONS[ev.id];
+    return exp && exp.danger_level === level;
+  });
+  renderTable(filtered);
+}
+
+// ── SIMULATE ATTACK ────────────────────────────────────────────────────────
+function createNewEvent(base) {
+  const now = new Date();
+  const id  = nextId++;
+  EXPLANATIONS[id] = EXPLANATIONS[base.id] ? { ...EXPLANATIONS[base.id] } : {
+    danger_level: 'Alto',
+    explanation_it: 'Nuovo attacco rilevato in tempo reale dal sistema HoneypotX.',
+    advice: 'Monitorare attentamente e applicare le contromisure appropriate.'
+  };
+  return {
+    ...base,
+    id,
+    timestamp: now.toISOString(),
+  };
+}
+
+function processNewAttack(ev) {
+  EVENTS.unshift(ev);
+
+  // Update UI
+  initStats();
+  drawAttackLine(ev, true);
+  addToFeed(ev, true);
+  updateAIInsights(ev);
+
+  // Flash cards
+  flashCard('card-total');
+  const exp = EXPLANATIONS[ev.id];
+  if (exp?.danger_level === 'Alto') flashCard('card-high');
+
+  // Show alert toast
+  const danger = exp?.danger_level || '?';
+  if (danger === 'Alto') {
+    showAlert(`⚠️ ${ev.attack_type} da ${ev.flag||'🌐'} ${ev.country}`, `IP: ${ev.ip} · Servizio: ${ev.service.toUpperCase()}`);
+  }
+
+  // Re-render table
+  if (currentFilter === 'all') renderTable(EVENTS, true);
+  else filterEvents(currentFilter, document.querySelector('.filter-btn.active'));
+
+  // Add marker
+  const color = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+  const size  = 12;
+  const icon  = L.divIcon({
+    html: `<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;border:2px solid rgba(255,255,255,0.4);box-shadow:0 0 ${size*2}px ${color};animation:blink 1s ease-in-out 3;"></div>`,
+    className:'', iconSize:[size,size], iconAnchor:[size/2,size/2]
+  });
+  L.marker([ev.lat, ev.lon], { icon })
+    .addTo(map)
+    .on('click', () => openModal(ev.id));
+}
+
+function autoSimulateAttack() {
+  const pool = [...BASE_EVENTS, ...EXTRA_ATTACKS];
+  const base = pool[Math.floor(Math.random() * pool.length)];
+  const ev   = createNewEvent(base);
+  processNewAttack(ev);
+}
+
+function triggerSimulatedAttack() {
+  const btn = document.getElementById('simBtn');
+  btn.classList.add('firing');
+  setTimeout(() => btn.classList.remove('firing'), 500);
+  autoSimulateAttack();
+}
+
+// ── ALERT TOAST ────────────────────────────────────────────────────────────
+function showAlert(title, body) {
+  const banner = document.getElementById('alertBanner');
+  const toast  = document.createElement('div');
+  toast.className = 'alert-toast';
+  toast.innerHTML = `<div class="alert-title">🚨 ATTACCO RILEVATO</div>${title}<br><span style="color:var(--muted);font-size:10px;">${body}</span>`;
+  banner.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// ── MODAL ──────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const ev  = EVENTS.find(e => e.id === id);
+  const exp = EXPLANATIONS[id];
+  if (!ev) return;
+
+  document.getElementById('modalTitle').textContent  = ev.attack_type;
+  document.getElementById('modalSource').textContent = `SOURCE: ${ev.source?.toUpperCase() || 'HONEYPOTX'} · ID: #${ev.id}`;
+
+  const danger     = exp ? exp.danger_level : '—';
+  const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+  const ts         = new Date(ev.timestamp).toLocaleString('it-IT');
+
+  document.getElementById('modalMeta').innerHTML = `
+    <div class="meta-chip">🌐 <span>${ev.ip}</span></div>
+    <div class="meta-chip">📍 <span>${ev.city}, ${ev.country}</span></div>
+    <div class="meta-chip">🔌 <span>${ev.service.toUpperCase()}</span></div>
+    <div class="meta-chip">📅 <span>${ts}</span></div>
+    <div class="meta-chip">⚠️ <span class="badge ${badgeClass}">${danger}</span></div>
+  `;
+
+  document.getElementById('modalContent').innerHTML = exp ? `
+    <div class="ai-section">
+      <div class="ai-label">🤖 ANALISI AI — COSA STA SUCCEDENDO</div>
+      <div class="ai-text">${exp.explanation_it}</div>
+    </div>
+    <div class="advice-section">
+      <div class="advice-label">💡 COME DIFENDERSI</div>
+      <div class="advice-text">${exp.advice}</div>
+    </div>` :
+    '<div class="no-explanation" style="color:var(--muted);text-align:center;padding:20px;">Analisi AI non disponibile.</div>';
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+
+function closeModalDirect() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalDirect(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "event_id": 214,
+    "attack_type": "XSS Attack",
+    "ip": "104.21.56.89",
+    "country": "Canada",
+    "service": "http",
+    "confidence": "high",
+    "explanation_it": "Immagina di essere in un caffè e di chiedere al barista di scrivere un messaggio sulla lavagna per tutti i clienti. Se il barista non controlla cosa gli chiedi di scrivere, potresti chiedergli di scrivere qualcosa che non dovrebbe, come ad esempio 'il caffè è gratuito oggi'. Un attacco XSS è simile, ma al posto del barista c'è un sito web e al posto della lavagna c'è il browser degli utenti. L'attaccante riesce a fare eseguire del codice maligno al sito web, che a sua volta esegue azioni non autorizzate nel browser degli utenti, come ad esempio rubare le informazioni di accesso. Qualcuno farebbe questo tipo di attacco per ottenere informazioni sensibili o per creare problemi ai siti web.",
+    "danger_level": "Alto",
+    "advice": "Per difendersi da questo tipo di attacco, è importante che i desarrollatori web controllino e validino tutte le informazioni che vengono inviate al sito, in modo da non eseguire codice maligno. Inoltre, è consigliabile utilizzare framework e librerie che offrono protezione contro gli attacchi XSS.",
+    "generated_at": "2026-03-31T10:04:12.403366"
+  }
+]
