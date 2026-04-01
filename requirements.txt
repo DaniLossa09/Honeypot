@@ -7,3 +7,6 @@ requests>=2.31.0
 # Web server
 flask>=3.0.0
 werkzeug>=3.0.0
+
+# Lettura Variabili di ambiente
+dotenv

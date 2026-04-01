@@ -1,0 +1,1 @@
+{"src_ip": "185.234.219.12", "timestamp": "2026-03-31T10:00:00", "dst_port": 22, "eventid": "cowrie.login.failed", "username": "root", "password": "123"}

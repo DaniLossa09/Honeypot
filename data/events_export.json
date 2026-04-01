@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2026-03-31T10:00:00",
+    "source": "cowrie",
+    "ip": "185.234.219.12",
+    "port": 22,
+    "service": "ssh",
+    "attack_type": "Brute Force",
+    "detail": "",
+    "country": "Austria",
+    "city": "Vienna",
+    "lat": 48.2049,
+    "lon": 16.3662,
+    "confidence": "medium"
+  }
+]
