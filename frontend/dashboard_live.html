@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoneypotX — Cyber Threat Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #080c10;
+    --surface:  #0d1117;
+    --border:   #1a2332;
+    --accent:   #00ff88;
+    --accent2:  #00aaff;
+    --danger:   #ff3355;
+    --warn:     #ffaa00;
+    --safe:     #00ff88;
+    --text:     #c9d1d9;
+    --muted:    #4a5568;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-head: 'Rajdhani', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── SFONDO GRIGLIA ANIMATA ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,17,23,0.95);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 12px rgba(0,255,136,0.3);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 12px rgba(0,255,136,0.3); }
+    50%       { box-shadow: 0 0 24px rgba(0,255,136,0.6); }
+  }
+
+  .logo-text {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.2; }
+  }
+
+  .timestamp {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── LAYOUT PRINCIPALE ── */
+  main {
+    position: relative;
+    z-index: 1;
+    padding: 24px 32px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* ── STAT CARDS ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.danger::before  { background: var(--danger); }
+  .stat-card.warn::before    { background: var(--warn); }
+  .stat-card.safe::before    { background: var(--safe); }
+  .stat-card.info::before    { background: var(--accent2); }
+
+  .stat-card:hover { border-color: var(--accent); }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: var(--font-head);
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+  }
+
+  .stat-value.danger { color: var(--danger); }
+  .stat-value.warn   { color: var(--warn); }
+  .stat-value.safe   { color: var(--safe); }
+  .stat-value.info   { color: var(--accent2); }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── SEZIONE MAPPA + GRAFICI ── */
+  .middle-row {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-title {
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* ── MAPPA ── */
+  #map {
+    height: 360px;
+    background: #0a0e14;
+  }
+
+  .leaflet-container { background: #0a0e14 !important; }
+
+  /* ── GRAFICO DONUT ── */
+  .chart-wrap {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #attackChart { max-height: 200px; }
+
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+
+  .legend-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .legend-name { color: var(--text); }
+  .legend-count {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 11px;
+  }
+
+  /* ── TABELLA EVENTI ── */
+  .events-section { margin-bottom: 24px; }
+
+  .events-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .filter-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,136,0.05);
+  }
+
+  .events-table-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(26,35,50,0.5);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(0,255,136,0.03); }
+
+  tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  .badge-danger { background: rgba(255,51,85,0.15);  color: var(--danger); border: 1px solid rgba(255,51,85,0.3); }
+  .badge-warn   { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.3); }
+  .badge-safe   { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
+
+  .attack-type {
+    font-weight: 500;
+    color: #fff;
+  }
+
+  .ip-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  .country-text { color: var(--muted); font-size: 12px; }
+  .service-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── MODAL SPIEGAZIONE AI ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    animation: modal-in 0.25s ease;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .modal-header {
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .modal-attack-type {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.2s;
+  }
+
+  .modal-close:hover { color: #fff; }
+
+  .modal-body { padding: 24px 28px; }
+
+  .modal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .meta-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .meta-chip span { color: var(--text); }
+
+  .ai-section {
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.15);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .ai-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .advice-section {
+    background: rgba(0,170,255,0.05);
+    border: 1px solid rgba(0,170,255,0.15);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+
+  .advice-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .advice-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .no-explanation {
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 48px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .middle-row { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🍯</div>
+    <div class="logo-text">Honeypot<span>X</span></div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      MONITORING ACTIVE
+    </div>
+    <div class="timestamp" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card danger">
+      <div class="stat-label">⚡ Attacchi Totali</div>
+      <div class="stat-value danger" id="stat-total">0</div>
+      <div class="stat-sub">eventi rilevati</div>
+    </div>
+    <div class="stat-card danger">
+      <div class="stat-label">🔴 Pericolo Alto</div>
+      <div class="stat-value danger" id="stat-high">0</div>
+      <div class="stat-sub">richiedono attenzione</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-label">🟡 Pericolo Medio</div>
+      <div class="stat-value warn" id="stat-medium">0</div>
+      <div class="stat-sub">da monitorare</div>
+    </div>
+    <div class="stat-card info">
+      <div class="stat-label">🌍 Paesi Attaccanti</div>
+      <div class="stat-value info" id="stat-countries">0</div>
+      <div class="stat-sub">origini uniche</div>
+    </div>
+  </div>
+
+  <!-- MAPPA + GRAFICO -->
+  <div class="middle-row">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> TIPO ATTACCO</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="attackChart"></canvas>
+        <div class="legend" id="chartLegend"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABELLA EVENTI -->
+  <div class="card events-section">
+    <div class="card-header">
+      <div class="card-title"><div class="dot"></div> EVENTI RILEVATI</div>
+      <div class="events-controls">
+        <button class="filter-btn active" onclick="filterEvents('all', this)">TUTTI</button>
+        <button class="filter-btn" onclick="filterEvents('Alto', this)">🔴 ALTO</button>
+        <button class="filter-btn" onclick="filterEvents('Medio', this)">🟡 MEDIO</button>
+        <button class="filter-btn" onclick="filterEvents('Basso', this)">🟢 BASSO</button>
+      </div>
+    </div>
+    <div class="events-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Pericolo</th>
+            <th>Tipo Attacco</th>
+            <th>IP Attaccante</th>
+            <th>Paese</th>
+            <th>Servizio</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody">
+          <tr><td colspan="6" class="empty">Caricamento dati...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODAL SPIEGAZIONE AI -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-attack-type" id="modalTitle">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta" id="modalMeta"></div>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function detectApiBase() {
+  if (window.HONEYPOTX_API_BASE) return window.HONEYPOTX_API_BASE;
+
+  const params = new URLSearchParams(window.location.search);
+  const apiFromQuery = params.get('api');
+  if (apiFromQuery) {
+    localStorage.setItem('honeypotx_api_base', apiFromQuery);
+    return apiFromQuery;
+  }
+
+  const savedApiBase = localStorage.getItem('honeypotx_api_base');
+  if (savedApiBase) return savedApiBase;
+
+  if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return 'http://localhost:8000';
+}
+
+const API_BASE = detectApiBase();
+const CHART_COLORS = [
+  '#ff3355','#ff6b35','#ffaa00','#00aaff',
+  '#aa55ff','#00ff88','#ff55aa','#55ffaa'
+];
+
+let currentFilter = 'all';
+let map;
+let attackChart;
+let markerLayer;
+let allEvents = [];
+let refreshTimer;
+
+function formatTimestamp(value) {
+  if (!value) return 'n/d';
+  const ts = new Date(value);
+  return Number.isNaN(ts.getTime()) ? 'n/d' : ts.toLocaleString('it-IT');
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('it-IT');
+}
+
+async function fetchJson(path) {
+  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+  return res.json();
+}
+
+async function refreshDashboard() {
+  const [statsResult, distributionResult, mapPointsResult, eventsResult] = await Promise.allSettled([
+    fetchJson('/stats'),
+    fetchJson('/attack-distribution'),
+    fetchJson('/map-points'),
+    fetchJson('/events?limit=200'),
+  ]);
+
+  if (statsResult.status === 'fulfilled') {
+    renderStats(statsResult.value || { total: 0, high: 0, medium: 0, countries: 0 });
+  } else {
+    console.error('Stats refresh failed:', statsResult.reason);
+    renderStats({ total: 0, high: 0, medium: 0, countries: 0 });
+  }
+
+  if (distributionResult.status === 'fulfilled') {
+    renderChart(Array.isArray(distributionResult.value) ? distributionResult.value : []);
+  } else {
+    console.error('Distribution refresh failed:', distributionResult.reason);
+    renderChart([]);
+  }
+
+  if (mapPointsResult.status === 'fulfilled') {
+    renderMap(Array.isArray(mapPointsResult.value) ? mapPointsResult.value : []);
+  } else {
+    console.error('Map refresh failed:', mapPointsResult.reason);
+    renderMap([]);
+  }
+
+  if (eventsResult.status === 'fulfilled') {
+    allEvents = Array.isArray(eventsResult.value) ? eventsResult.value : [];
+  } else {
+    console.error('Events refresh failed:', eventsResult.reason);
+    allEvents = [];
+  }
+
+  applyCurrentFilter();
+}
+
+function renderStats(stats) {
+  document.getElementById('stat-total').textContent = stats.total ?? 0;
+  document.getElementById('stat-high').textContent = stats.high ?? 0;
+  document.getElementById('stat-medium').textContent = stats.medium ?? 0;
+  document.getElementById('stat-countries').textContent = stats.countries ?? 0;
+}
+
+function initMap() {
+  map = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 18
+  }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+}
+
+function renderMap(points) {
+  if (!map || !markerLayer) return;
+  markerLayer.clearLayers();
+
+  const bounds = [];
+  points.forEach((point) => {
+    if (point.lat == null || point.lon == null) return;
+    const danger = point.danger_level || 'Basso';
+    const color = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+    const size = Math.min(8 + (point.count || 1) * 4, 24);
+    const icon = L.divIcon({
+      html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; border:2px solid rgba(255,255,255,0.3); box-shadow:0 0 ${size}px ${color}88; animation:pulse-marker 2s ease-in-out infinite;"></div>`,
+      className: '', iconSize: [size, size], iconAnchor: [size/2, size/2],
+    });
+    const marker = L.marker([point.lat, point.lon], { icon }).bindPopup(`
+      <div style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
+        <div style="color:#fff; font-size:14px; margin-bottom:6px;">${point.attack_type}</div>
+        <div>🌐 ${point.sample_ip || 'n/d'}</div>
+        <div>📍 ${point.city || 'Unknown'}, ${point.country || 'Unknown'}</div>
+        <div>🔌 ${(point.sample_service || 'unknown').toUpperCase()}</div>
+        <div>📊 Eventi: ${point.count || 0}</div>
+        <div style="margin-top:6px; color:${color};">● ${danger.toUpperCase()}</div>
+      </div>
+    `, { className: 'dark-popup' });
+    markerLayer.addLayer(marker);
+    bounds.push([point.lat, point.lon]);
+  });
+
+  if (bounds.length) {
+    map.fitBounds(bounds, { padding: [30, 30] });
+  } else {
+    map.setView([20, 0], 2);
+  }
+}
+
+function renderChart(distribution) {
+  const labels = distribution.map(x => x.attack_type);
+  const data = distribution.map(x => x.count);
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = '';
+
+  if (attackChart) attackChart.destroy();
+
+  attackChart = new Chart(document.getElementById('attackChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: CHART_COLORS.slice(0, labels.length).map(c => c + '99'),
+        borderColor: CHART_COLORS.slice(0, labels.length),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: { legend: { display: false } },
+      animation: { duration: 250 },
+    }
+  });
+
+  if (!distribution.length) {
+    legend.innerHTML = '<div class="empty">Nessun attacco reale nei log</div>';
+    return;
+  }
+
+  distribution.forEach((item, i) => {
+    legend.innerHTML += `
+      <div class="legend-item">
+        <div class="legend-left">
+          <div class="legend-dot" style="background:${CHART_COLORS[i]};"></div>
+          <span class="legend-name">${item.attack_type}</span>
+        </div>
+        <span class="legend-count">${item.count}</span>
+      </div>`;
+  });
+}
+
+function renderTable(events) {
+  const tbody = document.getElementById('eventsBody');
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nessun evento reale trovato nei log</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = events.map(ev => {
+    const danger = ev.danger_level || 'Basso';
+    const ts = formatTimestamp(ev.timestamp);
+    const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+    const dangerIcon = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
+    return `<tr onclick="openModal(${ev.id})">
+      <td><span class="badge ${badgeClass}">${dangerIcon} ${danger}</span></td>
+      <td class="attack-type">${ev.attack_type || 'Unknown'}</td>
+      <td class="ip-text">${ev.ip || 'n/d'}</td>
+      <td class="country-text">🌍 ${ev.country || 'Unknown'}</td>
+      <td><span class="service-text">${(ev.service || 'unknown').toUpperCase()}</span></td>
+      <td class="country-text">${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function applyCurrentFilter() {
+  const filtered = currentFilter === 'all'
+    ? allEvents
+    : allEvents.filter(ev => (ev.danger_level || 'Basso') === currentFilter);
+  renderTable(filtered);
+}
+
+function filterEvents(level, btn) {
+  currentFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyCurrentFilter();
+}
+
+async function openModal(id) {
+  try {
+    const ev = await fetchJson(`/event/${id}`);
+    document.getElementById('modalTitle').textContent = ev.attack_type || 'Unknown';
+    const danger = ev.danger_level || 'Basso';
+    const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+    const ts = formatTimestamp(ev.timestamp);
+    document.getElementById('modalMeta').innerHTML = `
+      <div class="meta-chip">🌐 IP: <span>${ev.ip || 'n/d'}</span></div>
+      <div class="meta-chip">📍 <span>${ev.city || 'Unknown'}, ${ev.country || 'Unknown'}</span></div>
+      <div class="meta-chip">🔌 <span>${(ev.service || 'unknown').toUpperCase()}</span></div>
+      <div class="meta-chip">📅 <span>${ts}</span></div>
+      <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${danger}</span></div>
+    `;
+
+    document.getElementById('modalContent').innerHTML = `
+      <div class="ai-section">
+        <div class="ai-label">🤖 SPIEGAZIONE ATTACCO</div>
+        <div class="ai-text">${ev.explanation_it || 'Spiegazione non disponibile.'}</div>
+      </div>
+      <div class="advice-section">
+        <div class="advice-label">💡 COME DIFENDERSI</div>
+        <div class="advice-text">${ev.advice || 'Nessun consiglio disponibile.'}</div>
+      </div>`;
+
+    document.getElementById('modalOverlay').classList.add('open');
+  } catch (err) {
+    console.error('Modal load failed:', err);
+  }
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModalDirect();
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  initMap();
+  await refreshDashboard();
+  refreshTimer = setInterval(refreshDashboard, 3000);
+});
+</script>
+
+<!-- Stile popup mappa -->
+<style>
+.dark-popup .leaflet-popup-content-wrapper {
+  background: #0d1117;
+  border: 1px solid #1a2332;
+  color: #c9d1d9;
+  border-radius: 8px;
+}
+.dark-popup .leaflet-popup-tip { background: #0d1117; }
+</style>
+
+</body>
+</html>

@@ -1,0 +1,22 @@
+[
+  {
+    "id": 316,
+    "event_hash": "7da6d7bf8d68f056e8de44a6143e7fb3fb567bbf8375eef9d78c5b67da9553bb",
+    "timestamp": "2026-04-18T15:50:20.113674",
+    "source": "opencanary",
+    "ip": "192.168.1.100",
+    "port": 80,
+    "service": "3000",
+    "raw_payload": "{\"dst_host\": \"172.18.0.4\", \"dst_port\": 80, \"local_time\": \"2026-04-18 15:50:20.113674\", \"local_time_adjusted\": \"2026-04-18 15:50:20.113715\", \"logdata\": {\"HOSTNAME\": \"192.168.1.102\", \"PATH\": \"/index.html\", \"SKIN\": \"nasLogin\", \"USERAGENT\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 OPR/129.0.0.0\"}, \"logtype\": 3000, \"node_id\": \"honeypot-01\", \"src_host\": \"192.168.1.100\", \"src_port\": 51522, \"utc_time\": \"2026-04-18 15:50:20.113707\"}",
+    "attack_type": "FTP Attack",
+    "country": "Local",
+    "city": "Local",
+    "lat": null,
+    "lon": null,
+    "danger_level": "Medio",
+    "explanation_it": "L'attaccante sta interagendo con il servizio FTP per accesso non autorizzato, brute force o trasferimento di file.",
+    "advice": "Disabilita accesso anonimo, preferisci SFTP o FTPS e limita gli IP autorizzati.",
+    "raw_event_json": "{\"dst_host\": \"172.18.0.4\", \"dst_port\": 80, \"local_time\": \"2026-04-18 15:50:20.113674\", \"local_time_adjusted\": \"2026-04-18 15:50:20.113715\", \"logdata\": {\"HOSTNAME\": \"192.168.1.102\", \"PATH\": \"/index.html\", \"SKIN\": \"nasLogin\", \"USERAGENT\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 OPR/129.0.0.0\"}, \"logtype\": 3000, \"node_id\": \"honeypot-01\", \"src_host\": \"192.168.1.100\", \"src_port\": 51522, \"utc_time\": \"2026-04-18 15:50:20.113707\"}",
+    "created_at": "2026-04-18 15:50:22"
+  }
+]
