@@ -104,3 +104,23 @@
 {"timestamp": "2026-04-18T15:49:14.780478", "src_ip": "192.168.1.100", "src_port": 55028, "command": "USER", "argument": ""}
 {"timestamp": "2026-04-18T15:49:16.026984", "src_ip": "192.168.1.100", "src_port": 55028, "command": "PASS", "argument": ""}
 {"timestamp": "2026-04-18T15:49:19.854510", "src_ip": "192.168.1.100", "src_port": 55028, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:29:46.797864", "src_ip": "172.18.0.1", "src_port": 40516, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:29:46.799149", "src_ip": "172.18.0.1", "src_port": 40516, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:30:34.565518", "src_ip": "172.18.0.1", "src_port": 57052, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:30:34.565969", "src_ip": "172.18.0.1", "src_port": 57052, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:36:42.377225", "src_ip": "192.168.1.55", "src_port": 52037, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T17:36:42.384005", "src_ip": "192.168.1.55", "src_port": 52037, "command": "OPTS", "argument": "UTF8 ON"}
+{"timestamp": "2026-04-23T17:36:44.257139", "src_ip": "192.168.1.55", "src_port": 52037, "command": "USER", "argument": ""}
+{"timestamp": "2026-04-23T17:36:44.445381", "src_ip": "192.168.1.55", "src_port": 52037, "command": "PASS", "argument": ""}
+{"timestamp": "2026-04-23T17:36:49.706439", "src_ip": "192.168.1.55", "src_port": 52037, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T18:09:07.083630", "src_ip": "192.168.1.55", "src_port": 52159, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T18:09:07.088815", "src_ip": "192.168.1.55", "src_port": 52159, "command": "OPTS", "argument": "UTF8 ON"}
+{"timestamp": "2026-04-23T18:09:07.889049", "src_ip": "192.168.1.55", "src_port": 52159, "command": "USER", "argument": ""}
+{"timestamp": "2026-04-23T18:09:08.392892", "src_ip": "192.168.1.55", "src_port": 52159, "command": "PASS", "argument": ""}
+{"timestamp": "2026-04-23T18:23:27.235305", "src_ip": "192.168.1.55", "src_port": 63400, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T18:23:27.240263", "src_ip": "192.168.1.55", "src_port": 63400, "command": "OPTS", "argument": "UTF8 ON"}
+{"timestamp": "2026-04-23T18:23:33.757435", "src_ip": "192.168.1.55", "src_port": 63400, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T19:54:03.247238", "src_ip": "172.18.0.1", "src_port": 53428, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T19:54:03.247669", "src_ip": "172.18.0.1", "src_port": 53428, "command": "DISCONNECT", "argument": ""}
+{"timestamp": "2026-04-23T20:04:23.310226", "src_ip": "172.18.0.1", "src_port": 41788, "command": "CONNECT", "argument": ""}
+{"timestamp": "2026-04-23T20:04:23.310670", "src_ip": "172.18.0.1", "src_port": 41788, "command": "DISCONNECT", "argument": ""}

@@ -18,6 +18,7 @@ services:
       - "23:2223"    # Telnet
     volumes:
       - ./logs/cowrie:/cowrie/cowrie-git/var/log/cowrie
+#      - ./cowrie.cfg:/cowrie/etc/cowrie.cfg
     networks:
       - honeypot-net
 

@@ -16,9 +16,9 @@ OFFSETS_PATH = Path(os.getenv('HPX_OFFSETS_PATH', STATE_DIR / 'offsets.json'))
 EVENTS_EXPORT_PATH = Path(os.getenv('HPX_EVENTS_EXPORT_PATH', EXPORT_DIR / 'events_export.json'))
 
 LOG_PATHS = {
-    'cowrie': os.getenv('HPX_COWRIE_LOG', '/home/cyferwall/honeypot_final_version/honeypots/logs/cowrie/cowrie.json'),
-    'opencanary': os.getenv('HPX_OPENCANARY_LOG', '/home/cyferwall/honeypot_final_version/honeypots/logs/opencanary/opencanary.log'),
-    'ftp': os.getenv('HPX_FTP_LOG', '/home/cyferwall/honeypot_final_version/honeypots/logs/ftp/ftp.json'),
+    'cowrie': os.getenv('HPX_COWRIE_LOG', '/home/cyferwall/honeypot/honeypots/logs/cowrie/cowrie.json'),
+    'opencanary': os.getenv('HPX_OPENCANARY_LOG', '/home/cyferwall/honeypot/honeypots/logs/opencanary/opencanary.log'),
+    'ftp': os.getenv('HPX_FTP_LOG', '/home/cyferwall/honeypot/honeypots/logs/ftp/ftp.json'),
 }
 
 GEO_API_BASE = os.getenv('HPX_GEO_API_BASE', 'http://ip-api.com/json')
