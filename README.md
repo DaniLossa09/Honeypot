@@ -50,13 +50,17 @@ cd honeypotx
 mkdir -p logs/cowrie logs/opencanary logs/ftp
 chmod -R 777 logs
 
+cd frontend
+python3 -m http.server 8080 &
+
+cd honeypots
 docker compose up -d --build
 
-cd backend
-python3 main.py
+cd ..
+python3 run_all.py
 ```
 
-Dashboard: http://localhost:3000
+Dashboard: http://localhost:8000
 
 ---
 
@@ -69,6 +73,7 @@ honeypotx/
 ├── frontend/
 └── honeypots/
 
+
 ---
 
 ## 🔐 Note
@@ -79,6 +84,4 @@ honeypotx/
 
 ---
 
-## 📄 Licenza
 
-MIT
