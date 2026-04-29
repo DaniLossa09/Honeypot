@@ -1,0 +1,279 @@
+2026-04-29T17:27:49.437111Z 2e2884a5b355 New connection: 172.18.0.1:34512 (172.18.0.2:2222) [session: 2e2884a5b355]
+2026-04-29T17:27:49.438262Z 2e2884a5b355 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T17:27:49.439527Z 2e2884a5b355 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T17:27:53.323268Z 2e2884a5b355 login attempt [root/D320lossa] failed
+2026-04-29T17:27:56.043806Z 2e2884a5b355 Connection lost after 6.6 seconds
+2026-04-29T17:28:00.389355Z 51e0b0d077c0 New connection: 172.18.0.1:51990 (172.18.0.2:2222) [session: 51e0b0d077c0]
+2026-04-29T17:28:00.393312Z 51e0b0d077c0 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T17:28:00.394354Z 51e0b0d077c0 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T17:28:02.411507Z 51e0b0d077c0 login attempt [admin/D320lossa] failed
+2026-04-29T17:28:06.683671Z 51e0b0d077c0 login attempt [admin/password] succeeded
+2026-04-29T17:28:06.731805Z 51e0b0d077c0 Terminal Size: 119 66
+2026-04-29T17:28:06.732563Z 51e0b0d077c0 request_env: LANG=C.UTF-8
+2026-04-29T17:28:06.733785Z 51e0b0d077c0 ()
+2026-04-29T17:28:07.991070Z 51e0b0d077c0 CMD: clear
+2026-04-29T17:28:08.366027Z 51e0b0d077c0 CMD: ls
+2026-04-29T17:28:10.928067Z 51e0b0d077c0 CMD: exit
+2026-04-29T17:28:10.929875Z 51e0b0d077c0 Closing TTY Log: var/lib/cowrie/tty/2ea6d92c6f931688be86e060169fae65b21d2550450cd0a631aa20f7ea2398d6 after 4.2 seconds
+2026-04-29T17:28:10.932545Z 51e0b0d077c0 Connection lost after 10.5 seconds
+2026-04-29T17:35:31.654239Z c6b7fc3b92fe New connection: 172.18.0.1:56262 (172.18.0.2:2222) [session: c6b7fc3b92fe]
+2026-04-29T17:35:31.655467Z c6b7fc3b92fe Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T17:35:31.656762Z c6b7fc3b92fe SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T17:35:35.844228Z c6b7fc3b92fe login attempt [root/dadsa] failed
+2026-04-29T17:35:47.316658Z c6b7fc3b92fe login attempt [root/D320lossa] failed
+2026-04-29T17:35:48.972783Z c6b7fc3b92fe login attempt [root/] failed
+2026-04-29T17:35:49.977210Z c6b7fc3b92fe Connection lost after 18.3 seconds
+2026-04-29T17:36:00.143528Z 95b6445e1467 New connection: 172.18.0.1:44950 (172.18.0.2:2222) [session: 95b6445e1467]
+2026-04-29T17:36:00.144493Z 95b6445e1467 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T17:36:00.145685Z 95b6445e1467 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T17:36:07.837837Z 95b6445e1467 login attempt [admin/password] succeeded
+2026-04-29T17:36:07.886813Z 95b6445e1467 Terminal Size: 59 66
+2026-04-29T17:36:07.887492Z 95b6445e1467 request_env: LANG=C.UTF-8
+2026-04-29T17:36:07.888615Z 95b6445e1467 ()
+2026-04-29T17:36:22.781991Z 95b6445e1467 CMD: ls
+2026-04-29T17:36:25.361872Z 95b6445e1467 CMD: whoami
+2026-04-29T17:36:34.141249Z 95b6445e1467 CMD: clear
+2026-04-29T17:36:42.162241Z 95b6445e1467 CMD: clear
+2026-04-29T17:36:47.592446Z 95b6445e1467 CMD: exit
+2026-04-29T17:36:47.594335Z 95b6445e1467 Closing TTY Log: var/lib/cowrie/tty/27664681669b74f69666cb84cddf36a8a870b9fb145dbcf34207978a1a249074 after 39.7 seconds
+2026-04-29T17:36:47.597029Z 95b6445e1467 Connection lost after 47.5 seconds
+2026-04-29T18:15:41.181865Z 50ef51d51d41 New connection: 172.18.0.1:45940 (172.18.0.2:2222) [session: 50ef51d51d41]
+2026-04-29T18:15:41.182878Z 50ef51d51d41 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:15:41.183913Z 50ef51d51d41 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:15:44.027786Z 50ef51d51d41 login attempt [root/D320kossa] failed
+2026-04-29T18:15:54.764349Z 50ef51d51d41 login attempt [root/dasdsa] failed
+2026-04-29T18:16:01.036782Z 50ef51d51d41 login attempt [root/dasasd] failed
+2026-04-29T18:16:02.041005Z 50ef51d51d41 Connection lost after 20.9 seconds
+2026-04-29T18:16:41.912988Z 87cab6189ac9 New connection: 172.18.0.1:36468 (172.18.0.2:2222) [session: 87cab6189ac9]
+2026-04-29T18:16:41.913944Z 87cab6189ac9 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:16:41.915057Z 87cab6189ac9 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:16:44.743124Z 87cab6189ac9 login attempt [root/hghg] failed
+2026-04-29T18:16:50.135334Z 87cab6189ac9 login attempt [root/gug] failed
+2026-04-29T18:16:52.415421Z 87cab6189ac9 login attempt [root/gigi] failed
+2026-04-29T18:16:53.419677Z 87cab6189ac9 Connection lost after 11.5 seconds
+2026-04-29T18:17:05.841698Z 4cf3d0cfd9bf New connection: 172.18.0.1:40396 (172.18.0.2:2222) [session: 4cf3d0cfd9bf]
+2026-04-29T18:17:05.842501Z 4cf3d0cfd9bf Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:17:05.843649Z 4cf3d0cfd9bf SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:17:07.688951Z 4cf3d0cfd9bf Connection lost after 1.8 seconds
+2026-04-29T18:17:13.986506Z 624ed753e1d7 New connection: 172.18.0.1:34988 (172.18.0.2:2222) [session: 624ed753e1d7]
+2026-04-29T18:17:13.987479Z 624ed753e1d7 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:17:13.988667Z 624ed753e1d7 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:17:16.680773Z 624ed753e1d7 login attempt [admin/D320lossa] failed
+2026-04-29T18:17:18.744856Z 624ed753e1d7 login attempt [admin/da] failed
+2026-04-29T18:17:20.272776Z 624ed753e1d7 login attempt [admin/das] failed
+2026-04-29T18:17:21.276994Z 624ed753e1d7 Connection lost after 7.3 seconds
+2026-04-29T18:17:24.106996Z d0913ccdcdfb New connection: 172.18.0.1:45756 (172.18.0.2:2222) [session: d0913ccdcdfb]
+2026-04-29T18:17:24.107981Z d0913ccdcdfb Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:17:24.109204Z d0913ccdcdfb SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:17:27.593341Z d0913ccdcdfb login attempt [admin/password] succeeded
+2026-04-29T18:17:27.690181Z d0913ccdcdfb Terminal Size: 59 66
+2026-04-29T18:17:27.690987Z d0913ccdcdfb request_env: LANG=C.UTF-8
+2026-04-29T18:17:27.692124Z d0913ccdcdfb ()
+2026-04-29T18:17:37.106024Z d0913ccdcdfb CMD: ls
+2026-04-29T18:17:44.908097Z d0913ccdcdfb CMD: whoami
+2026-04-29T18:17:48.914556Z d0913ccdcdfb CMD: dsad
+2026-04-29T18:17:48.915689Z d0913ccdcdfb Command not found: dsad 
+2026-04-29T18:17:49.413881Z d0913ccdcdfb CMD: das
+2026-04-29T18:17:49.414992Z d0913ccdcdfb Command not found: das 
+2026-04-29T18:17:49.715451Z d0913ccdcdfb CMD: das
+2026-04-29T18:17:49.716574Z d0913ccdcdfb Command not found: das 
+2026-04-29T18:17:49.984274Z d0913ccdcdfb CMD: das
+2026-04-29T18:17:49.985365Z d0913ccdcdfb Command not found: das 
+2026-04-29T18:17:50.212384Z d0913ccdcdfb CMD: das
+2026-04-29T18:17:50.213491Z d0913ccdcdfb Command not found: das 
+2026-04-29T18:17:50.482450Z d0913ccdcdfb CMD: das
+2026-04-29T18:17:50.483524Z d0913ccdcdfb Command not found: das 
+2026-04-29T18:17:50.714594Z d0913ccdcdfb CMD: d
+2026-04-29T18:17:50.715565Z d0913ccdcdfb Command not found: d 
+2026-04-29T18:17:51.001107Z d0913ccdcdfb CMD: asd
+2026-04-29T18:17:51.002098Z d0913ccdcdfb Command not found: asd 
+2026-04-29T18:17:51.230590Z d0913ccdcdfb CMD: asd
+2026-04-29T18:17:51.231560Z d0913ccdcdfb Command not found: asd 
+2026-04-29T18:17:51.517213Z d0913ccdcdfb CMD: asfsd
+2026-04-29T18:17:51.518255Z d0913ccdcdfb Command not found: asfsd 
+2026-04-29T18:17:51.782413Z d0913ccdcdfb CMD: f
+2026-04-29T18:17:51.783384Z d0913ccdcdfb Command not found: f 
+2026-04-29T18:17:52.053310Z d0913ccdcdfb CMD: sdafds
+2026-04-29T18:17:52.054310Z d0913ccdcdfb Command not found: sdafds 
+2026-04-29T18:17:52.284133Z d0913ccdcdfb CMD: f
+2026-04-29T18:17:52.285092Z d0913ccdcdfb Command not found: f 
+2026-04-29T18:17:52.493087Z d0913ccdcdfb CMD: sdaf
+2026-04-29T18:17:52.494089Z d0913ccdcdfb Command not found: sdaf 
+2026-04-29T18:17:52.780207Z d0913ccdcdfb CMD: dsaf
+2026-04-29T18:17:52.781195Z d0913ccdcdfb Command not found: dsaf 
+2026-04-29T18:17:53.047383Z d0913ccdcdfb CMD: sdf
+2026-04-29T18:17:53.048347Z d0913ccdcdfb Command not found: sdf 
+2026-04-29T18:17:53.300721Z d0913ccdcdfb CMD: sdaf
+2026-04-29T18:17:53.301687Z d0913ccdcdfb Command not found: sdaf 
+2026-04-29T18:17:53.548596Z d0913ccdcdfb CMD: sadf
+2026-04-29T18:17:53.549569Z d0913ccdcdfb Command not found: sadf 
+2026-04-29T18:17:53.738736Z d0913ccdcdfb CMD: 
+2026-04-29T18:17:53.967993Z d0913ccdcdfb CMD: sdaf
+2026-04-29T18:17:53.968961Z d0913ccdcdfb Command not found: sdaf 
+2026-04-29T18:17:54.195838Z d0913ccdcdfb CMD: sdaf
+2026-04-29T18:17:54.196825Z d0913ccdcdfb Command not found: sdaf 
+2026-04-29T18:17:54.447798Z d0913ccdcdfb CMD: asd
+2026-04-29T18:17:54.448672Z d0913ccdcdfb Command not found: asd 
+2026-04-29T18:17:54.658143Z d0913ccdcdfb CMD: fsda
+2026-04-29T18:17:54.659138Z d0913ccdcdfb Command not found: fsda 
+2026-04-29T18:17:54.888993Z d0913ccdcdfb CMD: f
+2026-04-29T18:17:54.890069Z d0913ccdcdfb Command not found: f 
+2026-04-29T18:17:55.100433Z d0913ccdcdfb CMD: sdaf
+2026-04-29T18:17:55.101503Z d0913ccdcdfb Command not found: sdaf 
+2026-04-29T18:17:55.310704Z d0913ccdcdfb CMD: dsf
+2026-04-29T18:17:55.311719Z d0913ccdcdfb Command not found: dsf 
+2026-04-29T18:17:55.503301Z d0913ccdcdfb CMD: sd
+2026-04-29T18:17:55.504381Z d0913ccdcdfb Command not found: sd 
+2026-04-29T18:17:55.717622Z d0913ccdcdfb CMD: fsd
+2026-04-29T18:17:55.718697Z d0913ccdcdfb Command not found: fsd 
+2026-04-29T18:17:55.906087Z d0913ccdcdfb CMD: af
+2026-04-29T18:17:55.907161Z d0913ccdcdfb Command not found: af 
+2026-04-29T18:17:56.100049Z d0913ccdcdfb CMD: sdf
+2026-04-29T18:17:56.101660Z d0913ccdcdfb Command not found: sdf 
+2026-04-29T18:17:56.269911Z d0913ccdcdfb CMD: sda
+2026-04-29T18:17:56.270852Z d0913ccdcdfb Command not found: sda 
+2026-04-29T18:17:57.843663Z d0913ccdcdfb CMD: clear
+2026-04-29T18:18:00.996448Z d0913ccdcdfb CMD: exit
+2026-04-29T18:18:00.998429Z d0913ccdcdfb Closing TTY Log: var/lib/cowrie/tty/c1c5e560a418bcb14009eb488b0aba9bd06a5230b4545521588eaa441d046b3c after 33.3 seconds
+2026-04-29T18:18:01.001828Z d0913ccdcdfb Connection lost after 36.9 seconds
+2026-04-29T18:18:05.189189Z 282a002c7102 New connection: 172.18.0.1:36428 (172.18.0.2:2222) [session: 282a002c7102]
+2026-04-29T18:18:05.190130Z 282a002c7102 Remote SSH version: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.15
+2026-04-29T18:18:05.191349Z 282a002c7102 SSH client hassh fingerprint: aae6b9604f6f3356543709a376d7f657
+2026-04-29T18:18:07.907525Z 282a002c7102 login attempt [admin/password] succeeded
+2026-04-29T18:18:07.952878Z 282a002c7102 Terminal Size: 59 66
+2026-04-29T18:18:07.953550Z 282a002c7102 request_env: LANG=C.UTF-8
+2026-04-29T18:18:07.954504Z 282a002c7102 ()
+2026-04-29T18:18:19.736938Z 282a002c7102 CMD: e
+2026-04-29T18:18:19.738062Z 282a002c7102 Command not found: e 
+2026-04-29T18:18:42.456436Z 282a002c7102 CMD: exit
+2026-04-29T18:18:42.458038Z 282a002c7102 Closing TTY Log: var/lib/cowrie/tty/3b699db5ce8bba49a551f30778716eb3c50fcf88264fe5ce9cd40c2e0a377526 after 34.5 seconds
+2026-04-29T18:18:42.460760Z 282a002c7102 Connection lost after 37.3 seconds
+2026-04-29T18:20:31.504165Z 45e327f7f48e New connection: 192.168.1.74:55702 (172.18.0.2:2223) [session: 45e327f7f48e]
+2026-04-29T18:20:37.510620Z 45e327f7f48e login attempt [/] failed
+2026-04-29T18:20:42.517102Z 45e327f7f48e Connection lost after 11 seconds
+2026-04-29T18:20:42.518112Z ffbb926d1630 New connection: 192.168.1.74:33376 (172.18.0.2:2223) [session: ffbb926d1630]
+2026-04-29T18:20:42.518852Z ffbb926d1630 Telnet WILL TERMINAL-TYPE
+2026-04-29T18:20:42.519476Z ffbb926d1630 Telnet WILL UNKNOWN-25
+2026-04-29T18:20:42.520085Z ffbb926d1630 Telnet DO UNKNOWN-25
+2026-04-29T18:20:42.520676Z ffbb926d1630 Telnet WILL BINARY
+2026-04-29T18:20:42.521232Z ffbb926d1630 Telnet DO BINARY
+2026-04-29T18:20:47.519449Z ffbb926d1630 Connection lost after 5 seconds
+2026-04-29T18:20:47.520710Z 71d259bad64f New connection: 192.168.1.74:44956 (172.18.0.2:2223) [session: 71d259bad64f]
+2026-04-29T18:20:47.521980Z 71d259bad64f login attempt [GET / HTTP/1.0/] failed
+2026-04-29T18:20:52.524101Z 71d259bad64f Connection lost after 5 seconds
+2026-04-29T18:20:52.525204Z 638734e14c5e New connection: 192.168.1.74:44962 (172.18.0.2:2223) [session: 638734e14c5e]
+2026-04-29T18:20:52.526309Z 638734e14c5e login attempt [OPTIONS / HTTP/1.0/] failed
+2026-04-29T18:20:57.527497Z 638734e14c5e Connection lost after 5 seconds
+2026-04-29T18:20:57.528634Z a986ca20e6a1 New connection: 192.168.1.74:45742 (172.18.0.2:2223) [session: a986ca20e6a1]
+2026-04-29T18:20:57.529845Z a986ca20e6a1 login attempt [OPTIONS / RTSP/1.0/] failed
+2026-04-29T18:21:02.533724Z a986ca20e6a1 Connection lost after 5 seconds
+2026-04-29T18:21:02.534815Z 4a2f9664d503 New connection: 192.168.1.74:45754 (172.18.0.2:2223) [session: 4a2f9664d503]
+2026-04-29T18:21:07.538898Z 4a2f9664d503 Connection lost after 5 seconds
+2026-04-29T18:21:07.540149Z 1a06e632d190 New connection: 192.168.1.74:37876 (172.18.0.2:2223) [session: 1a06e632d190]
+2026-04-29T18:21:12.545045Z 1a06e632d190 Connection lost after 5 seconds
+2026-04-29T18:21:12.546324Z b706a81b4a7b New connection: 192.168.1.74:37886 (172.18.0.2:2223) [session: b706a81b4a7b]
+2026-04-29T18:21:17.550931Z b706a81b4a7b Connection lost after 5 seconds
+2026-04-29T18:21:17.555444Z ea3039e8eaa8 New connection: 192.168.1.74:53548 (172.18.0.2:2223) [session: ea3039e8eaa8]
+2026-04-29T18:21:25.059354Z ea3039e8eaa8 Connection lost after 7 seconds
+2026-04-29T18:21:25.060680Z 3b173ed7e90c New connection: 192.168.1.74:59968 (172.18.0.2:2223) [session: 3b173ed7e90c]
+2026-04-29T18:21:30.066020Z 3b173ed7e90c Connection lost after 5 seconds
+2026-04-29T18:21:30.067181Z 523df17fbbe0 New connection: 192.168.1.74:59978 (172.18.0.2:2223) [session: 523df17fbbe0]
+2026-04-29T18:21:35.071772Z 523df17fbbe0 Connection lost after 5 seconds
+2026-04-29T18:21:35.075827Z 34d876588962 New connection: 192.168.1.74:45614 (172.18.0.2:2223) [session: 34d876588962]
+2026-04-29T18:21:35.081408Z 34d876588962 Connection lost after 0 seconds
+2026-04-29T18:21:35.082608Z 89a921fbc671 New connection: 192.168.1.74:45628 (172.18.0.2:2223) [session: 89a921fbc671]
+2026-04-29T18:21:40.087956Z 89a921fbc671 Connection lost after 5 seconds
+2026-04-29T18:21:40.092092Z 8c5f650cb043 New connection: 192.168.1.74:45640 (172.18.0.2:2223) [session: 8c5f650cb043]
+2026-04-29T18:21:40.093198Z 8c5f650cb043 Connection lost after 0 seconds
+2026-04-29T18:21:40.094343Z 0ac39b17b431 New connection: 192.168.1.74:45656 (172.18.0.2:2223) [session: 0ac39b17b431]
+2026-04-29T18:21:45.100005Z 0ac39b17b431 Connection lost after 5 seconds
+2026-04-29T18:21:45.104742Z 0b9d8483d086 New connection: 192.168.1.74:37074 (172.18.0.2:2223) [session: 0b9d8483d086]
+2026-04-29T18:21:45.106769Z 0b9d8483d086 login attempt [GET /nice%20ports%2C/Tri%6Eity.txt%2ebak HTTP/1.0/] failed
+2026-04-29T18:21:50.107293Z 0b9d8483d086 Connection lost after 5 seconds
+2026-04-29T18:21:50.114082Z f363bccfbb8b New connection: 192.168.1.74:37086 (172.18.0.2:2223) [session: f363bccfbb8b]
+2026-04-29T18:21:55.112798Z f363bccfbb8b Connection lost after 4 seconds
+2026-04-29T18:21:55.117448Z b5f531b4c1aa New connection: 192.168.1.74:35548 (172.18.0.2:2223) [session: b5f531b4c1aa]
+2026-04-29T18:21:55.118705Z b5f531b4c1aa login attempt [b'0\x84\x00\x00\x00-\x02\x01\x07c\x84\x00\x00\x00$\x04\x00'/ ] failed
+2026-04-29T18:22:00.119910Z b5f531b4c1aa Connection lost after 5 seconds
+2026-04-29T18:22:00.123842Z a5ac5963ce04 New connection: 192.168.1.74:35556 (172.18.0.2:2223) [session: a5ac5963ce04]
+2026-04-29T18:22:05.125553Z a5ac5963ce04 Connection lost after 5 seconds
+2026-04-29T18:22:05.130430Z 978c82721008 New connection: 192.168.1.74:33156 (172.18.0.2:2223) [session: 978c82721008]
+2026-04-29T18:22:05.131744Z 978c82721008 login attempt [OPTIONS sip:nm SIP/2.0/Via: SIP/2.0/TCP nm;branch=foo] failed
+2026-04-29T18:22:05.132915Z 978c82721008 login attempt [From: <sip:nm@nm>;tag=root/To: <sip:nm2@nm2>] failed
+2026-04-29T18:22:05.133967Z 978c82721008 login attempt [Call-ID: 50000/CSeq: 42 OPTIONS] failed
+2026-04-29T18:22:05.134887Z 978c82721008 login attempt [Max-Forwards: 70/Content-Length: 0] failed
+2026-04-29T18:22:05.135658Z 978c82721008 login attempt [Contact: <sip:nm@nm>/Accept: application/sdp] failed
+2026-04-29T18:22:12.635816Z 978c82721008 Connection lost after 7 seconds
+2026-04-29T18:22:12.636820Z 0e6923681152 New connection: 192.168.1.74:47288 (172.18.0.2:2223) [session: 0e6923681152]
+2026-04-29T18:22:17.639998Z 0e6923681152 Connection lost after 5 seconds
+2026-04-29T18:22:17.641223Z 8c61a60395e6 New connection: 192.168.1.74:47300 (172.18.0.2:2223) [session: 8c61a60395e6]
+2026-04-29T18:22:22.646375Z 8c61a60395e6 Connection lost after 5 seconds
+2026-04-29T18:22:22.647685Z acd7d8a04b84 New connection: 192.168.1.74:46274 (172.18.0.2:2223) [session: acd7d8a04b84]
+2026-04-29T18:22:22.649055Z acd7d8a04b84 Connection lost after 0 seconds
+2026-04-29T18:22:22.650211Z ca107143f165 New connection: 192.168.1.74:46278 (172.18.0.2:2223) [session: ca107143f165]
+2026-04-29T18:22:27.655657Z ca107143f165 Connection lost after 5 seconds
+2026-04-29T18:22:27.660209Z 558871dadb7b New connection: 192.168.1.74:46286 (172.18.0.2:2223) [session: 558871dadb7b]
+2026-04-29T18:22:32.661637Z 558871dadb7b Connection lost after 5 seconds
+2026-04-29T18:22:32.665674Z 80c8f05e989e New connection: 192.168.1.74:40462 (172.18.0.2:2223) [session: 80c8f05e989e]
+2026-04-29T18:22:37.667209Z 80c8f05e989e Connection lost after 5 seconds
+2026-04-29T18:22:37.671448Z be8e435efc94 New connection: 192.168.1.74:40464 (172.18.0.2:2223) [session: be8e435efc94]
+2026-04-29T18:22:37.672601Z be8e435efc94 Connection lost after 0 seconds
+2026-04-29T18:22:37.673743Z 60f3e79de999 New connection: 192.168.1.74:40472 (172.18.0.2:2223) [session: 60f3e79de999]
+2026-04-29T18:22:37.674739Z 60f3e79de999 Connection lost after 0 seconds
+2026-04-29T18:22:37.675817Z 4a6965c46480 New connection: 192.168.1.74:40486 (172.18.0.2:2223) [session: 4a6965c46480]
+2026-04-29T18:22:42.679145Z 4a6965c46480 Connection lost after 5 seconds
+2026-04-29T18:22:42.683459Z 3113c2c21371 New connection: 192.168.1.74:50740 (172.18.0.2:2223) [session: 3113c2c21371]
+2026-04-29T18:22:47.685802Z 3113c2c21371 Connection lost after 5 seconds
+2026-04-29T18:22:48.868841Z 9b696607c538 New connection: 192.168.1.74:50748 (172.18.0.2:2223) [session: 9b696607c538]
+2026-04-29T18:22:48.910206Z 9b696607c538 Connection lost after 0 seconds
+2026-04-29T18:22:48.934958Z 114b7a2bc6c6 New connection: 192.168.1.74:50750 (172.18.0.2:2223) [session: 114b7a2bc6c6]
+2026-04-29T18:22:56.000229Z 114b7a2bc6c6 Connection lost after 7 seconds
+2026-04-29T18:22:56.644134Z 5615e5f73c1f New connection: 192.168.1.74:895 (172.18.0.2:2223) [session: 5615e5f73c1f]
+2026-04-29T18:22:57.693808Z 5615e5f73c1f Connection lost after 1 seconds
+2026-04-29T18:36:33.481194Z 438668b18c09 New connection: 192.168.1.69:56504 (172.18.0.2:2222) [session: 438668b18c09]
+2026-04-29T18:36:33.483628Z 438668b18c09 Remote SSH version: SSH-2.0-OpenSSH_for_Windows_9.5
+2026-04-29T18:36:33.495630Z 438668b18c09 SSH client hassh fingerprint: 701158e75b508e76f0410d5d22ef9df0
+2026-04-29T18:36:42.367552Z 438668b18c09 Connection lost after 8.9 seconds
+2026-04-29T18:36:53.257236Z dd7d24dd05eb New connection: 192.168.1.69:56506 (172.18.0.2:2222) [session: dd7d24dd05eb]
+2026-04-29T18:36:53.259468Z dd7d24dd05eb Remote SSH version: SSH-2.0-OpenSSH_for_Windows_9.5
+2026-04-29T18:36:53.262126Z dd7d24dd05eb SSH client hassh fingerprint: 701158e75b508e76f0410d5d22ef9df0
+2026-04-29T18:36:56.192161Z dd7d24dd05eb login attempt [root/D320lossa] failed
+2026-04-29T18:36:57.933898Z dd7d24dd05eb login attempt [root/] failed
+2026-04-29T18:36:59.217225Z dd7d24dd05eb login attempt [root/] failed
+2026-04-29T18:37:00.226680Z dd7d24dd05eb Connection lost after 7.0 seconds
+2026-04-29T18:37:07.763061Z 007681d37c8b New connection: 192.168.1.69:56507 (172.18.0.2:2222) [session: 007681d37c8b]
+2026-04-29T18:37:07.765069Z 007681d37c8b Remote SSH version: SSH-2.0-OpenSSH_for_Windows_9.5
+2026-04-29T18:37:07.767937Z 007681d37c8b SSH client hassh fingerprint: 701158e75b508e76f0410d5d22ef9df0
+2026-04-29T18:37:10.354749Z 007681d37c8b login attempt [admin/password] succeeded
+2026-04-29T18:37:10.408181Z 007681d37c8b Terminal Size: 73 18
+2026-04-29T18:37:10.409345Z 007681d37c8b ()
+2026-04-29T18:37:13.846571Z 007681d37c8b CMD: ls
+2026-04-29T18:37:15.013980Z 007681d37c8b CMD: cler
+2026-04-29T18:37:15.014976Z 007681d37c8b Command not found: cler 
+2026-04-29T18:37:16.554168Z 007681d37c8b CMD: clear
+2026-04-29T18:38:54.517538Z 007681d37c8b CMD: clear
+2026-04-29T18:39:09.586858Z 007681d37c8b CMD: ssda
+2026-04-29T18:39:09.588012Z 007681d37c8b Command not found: ssda 
+2026-04-29T18:39:10.410404Z 007681d37c8b CMD: dsadsa
+2026-04-29T18:39:10.411494Z 007681d37c8b Command not found: dsadsa 
+2026-04-29T18:39:10.798150Z 007681d37c8b CMD: das
+2026-04-29T18:39:10.799219Z 007681d37c8b Command not found: das 
+2026-04-29T18:39:11.095538Z 007681d37c8b CMD: dsa
+2026-04-29T18:39:11.096558Z 007681d37c8b Command not found: dsa 
+2026-04-29T18:39:11.359449Z 007681d37c8b CMD: dsa
+2026-04-29T18:39:11.360477Z 007681d37c8b Command not found: dsa 
+2026-04-29T18:39:11.575413Z 007681d37c8b CMD: dsa
+2026-04-29T18:39:11.576461Z 007681d37c8b Command not found: dsa 
+2026-04-29T18:39:13.237946Z 007681d37c8b CMD: exit
+2026-04-29T18:39:13.239757Z 007681d37c8b Closing TTY Log: var/lib/cowrie/tty/b57ac44ce5ee65af628cd634c17a81703f98ec9938b05bd141a703310ec08dc7 after 122.8 seconds
+2026-04-29T18:39:13.245589Z 007681d37c8b Connection lost after 125.5 seconds
+2026-04-29T18:39:16.273872Z 4303e4eab542 New connection: 192.168.1.69:56872 (172.18.0.2:2222) [session: 4303e4eab542]
+2026-04-29T18:39:16.276003Z 4303e4eab542 Remote SSH version: SSH-2.0-OpenSSH_for_Windows_9.5
+2026-04-29T18:39:16.278168Z 4303e4eab542 SSH client hassh fingerprint: 701158e75b508e76f0410d5d22ef9df0
+2026-04-29T18:39:19.092264Z 4303e4eab542 login attempt [admin/password] succeeded
+2026-04-29T18:39:19.141766Z 4303e4eab542 Terminal Size: 73 18
+2026-04-29T18:39:19.142879Z 4303e4eab542 ()
+2026-04-29T18:39:20.501314Z 4303e4eab542 CMD: clear
+2026-04-29T18:39:22.234658Z 4303e4eab542 CMD: exit
+2026-04-29T18:39:22.236376Z 4303e4eab542 Closing TTY Log: var/lib/cowrie/tty/92cf152ca88744473e6c3aa2ae34d5c284d659d68ad43006ac335fa8bfddffeb after 3.1 seconds
+2026-04-29T18:39:22.242121Z 4303e4eab542 Connection lost after 6.0 seconds

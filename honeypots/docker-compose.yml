@@ -17,8 +17,9 @@ services:
       - "22:2222"    # SSH
       - "23:2223"    # Telnet
     volumes:
+      - ./cowrie/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./cowrie/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
       - ./logs/cowrie:/cowrie/cowrie-git/var/log/cowrie
-#      - ./cowrie.cfg:/cowrie/etc/cowrie.cfg
     networks:
       - honeypot-net
 

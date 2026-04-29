@@ -72,17 +72,19 @@ def parse_cowrie_line(line: str) -> Optional[Dict[str, Any]]:
     obj = safe_json_loads(line)
     if not obj:
         return None
+    protocol = str(obj.get('protocol') or '').lower()
     return {
         'timestamp': normalize_timestamp(obj.get('timestamp')),
         'source': 'cowrie',
         'ip': obj.get('src_ip') or extract_ip(obj),
         'port': _coerce_port(obj.get('src_port') or obj.get('dst_port')) or 22,
-        'service': 'ssh' if 'ssh' in str(obj.get('eventid', '')).lower() else 'telnet',
+        'service': protocol if protocol in {'ssh', 'telnet'} else 'ssh',
         'message': obj.get('message') or obj.get('eventid') or '',
         'eventid': obj.get('eventid'),
         'username': obj.get('username'),
         'password': obj.get('password'),
         'command': obj.get('input') or obj.get('command'),
+        'protocol': protocol,
         'raw_payload': json.dumps(obj, ensure_ascii=False),
         'raw_event': obj,
     }
@@ -113,15 +115,23 @@ def parse_opencanary_line(line: str) -> Optional[Dict[str, Any]]:
     obj = safe_json_loads(line)
     if obj:
         logdata = obj.get('logdata', {}) if isinstance(obj.get('logdata'), dict) else {}
-        request = logdata.get('REQUEST', '')
+        port = _coerce_port(obj.get('dst_port') or obj.get('src_port') or logdata.get('PORT'))
+        request = logdata.get('REQUEST') or logdata.get('PATH') or ''
+        service = str(logdata.get('SERVICE_NAME') or '').lower()
+        if not service and port in {80, 443}:
+            service = 'https' if port == 443 else 'http'
         return {
             'timestamp': normalize_timestamp(obj.get('local_time') or obj.get('utc_time') or obj.get('timestamp')),
             'source': 'opencanary',
             'ip': obj.get('src_host') or logdata.get('REMOTE_ADDR') or extract_ip(obj),
-            'port': _coerce_port(obj.get('dst_port') or obj.get('src_port') or logdata.get('PORT')),
-            'service': str(obj.get('logtype') or logdata.get('SERVICE_NAME') or '').lower(),
+            'port': port,
+            'service': service or str(obj.get('logtype') or '').lower(),
             'message': obj.get('logtype') or request or line.strip(),
+            'event_type': obj.get('logtype'),
             'uri': request,
+            'path': logdata.get('PATH') or request,
+            'username': logdata.get('USERNAME'),
+            'password': logdata.get('PASSWORD'),
             'user_agent': logdata.get('USERAGENT') or logdata.get('User-Agent'),
             'raw_payload': json.dumps(obj, ensure_ascii=False),
             'raw_event': obj,
@@ -132,11 +142,13 @@ def parse_opencanary_line(line: str) -> Optional[Dict[str, Any]]:
 def parse_ftp_line(line: str) -> Optional[Dict[str, Any]]:
     obj = safe_json_loads(line)
     if obj:
+        command = str(obj.get('command') or obj.get('action') or '').upper()
+        argument = obj.get('argument') or obj.get('arg') or ''
         message = str(
             obj.get('message')
             or obj.get('msg')
             or obj.get('event')
-            or obj.get('command')
+            or command
             or obj.get('status')
             or ''
         )
@@ -147,8 +159,10 @@ def parse_ftp_line(line: str) -> Optional[Dict[str, Any]]:
             'port': _coerce_port(obj.get('port') or obj.get('dst_port') or obj.get('remote_port')) or 21,
             'service': str(obj.get('service') or 'ftp').lower(),
             'message': message or line.strip(),
-            'username': obj.get('username') or obj.get('user'),
-            'command': obj.get('command') or obj.get('action'),
+            'username': obj.get('username') or obj.get('user') or (argument if command == 'USER' else None),
+            'password': obj.get('password') or (argument if command == 'PASS' else None),
+            'command': command,
+            'argument': argument,
             'raw_payload': json.dumps(obj, ensure_ascii=False),
             'raw_event': obj,
         }

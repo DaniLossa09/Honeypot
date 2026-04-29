@@ -1,6 +1,7 @@
 FROM cowrie/cowrie:latest
 
+COPY --chown=cowrie:cowrie cowrie.cfg /cowrie/cowrie-git/etc/cowrie.cfg
+COPY --chown=cowrie:cowrie userdb.txt /cowrie/cowrie-git/etc/userdb.txt
 USER cowrie
-COPY cowrie.cfg /home/cowrie/cowrie/etc/cowrie.cfg
 
 EXPOSE 2222 2223

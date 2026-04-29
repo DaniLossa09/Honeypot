@@ -1,8 +1,8 @@
+import os
 import json
 import sqlite3
-import os
 from contextlib import contextmanager
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .config import DB_PATH
 
@@ -83,6 +83,94 @@ def insert_event(event: Dict[str, Any]) -> bool:
         cur = conn.execute(sql, values)
         conn.commit()
         return cur.rowcount > 0
+
+
+def _record_from_row(row: sqlite3.Row) -> Dict[str, Any]:
+    try:
+        raw_event = json.loads(row['raw_event_json'] or '{}')
+    except Exception:
+        raw_event = {}
+
+    logdata = raw_event.get('logdata', {}) if isinstance(raw_event.get('logdata'), dict) else {}
+    command = raw_event.get('command') or raw_event.get('action') or raw_event.get('input')
+    argument = raw_event.get('argument') or raw_event.get('arg') or ''
+
+    return {
+        'timestamp': row['timestamp'],
+        'source': row['source'],
+        'ip': row['ip'],
+        'port': row['port'],
+        'service': row['service'],
+        'message': raw_event.get('message') or raw_event.get('logtype') or command or row['raw_payload'] or '',
+        'eventid': raw_event.get('eventid'),
+        'event_type': raw_event.get('logtype'),
+        'username': raw_event.get('username') or raw_event.get('user') or logdata.get('USERNAME') or (argument if command == 'USER' else None),
+        'password': raw_event.get('password') or logdata.get('PASSWORD') or (argument if command == 'PASS' else None),
+        'command': command,
+        'argument': argument,
+        'uri': logdata.get('REQUEST') or logdata.get('PATH') or '',
+        'path': logdata.get('PATH') or '',
+        'user_agent': logdata.get('USERAGENT') or logdata.get('User-Agent'),
+        'protocol': raw_event.get('protocol'),
+        'raw_payload': row['raw_payload'],
+        'raw_event': raw_event,
+    }
+
+
+def reconcile_events(
+    classifier: Callable[[Dict[str, Any]], Optional[str]],
+    explainer: Callable[[str], Dict[str, str]],
+    event_hasher: Optional[Callable[[Dict[str, Any]], str]] = None,
+) -> Dict[str, int]:
+    removed = 0
+    updated = 0
+    seen_hashes = set()
+
+    with get_conn() as conn:
+        rows = conn.execute('SELECT * FROM events').fetchall()
+        for row in rows:
+            record = _record_from_row(row)
+            attack_type = classifier(record)
+            if not attack_type:
+                conn.execute('DELETE FROM events WHERE id = ?', (row['id'],))
+                removed += 1
+                continue
+
+            record['attack_type'] = attack_type
+            new_hash = event_hasher(record) if event_hasher else row['event_hash']
+            if new_hash in seen_hashes:
+                conn.execute('DELETE FROM events WHERE id = ?', (row['id'],))
+                removed += 1
+                continue
+            seen_hashes.add(new_hash)
+
+            explanation = explainer(attack_type)
+            if (
+                row['event_hash'] != new_hash
+                or row['attack_type'] != attack_type
+                or row['danger_level'] != explanation.get('danger_level')
+                or row['explanation_it'] != explanation.get('explanation_it')
+                or row['advice'] != explanation.get('advice')
+            ):
+                conn.execute(
+                    '''
+                    UPDATE events
+                    SET event_hash = ?, attack_type = ?, danger_level = ?, explanation_it = ?, advice = ?
+                    WHERE id = ?
+                    ''',
+                    (
+                        new_hash,
+                        attack_type,
+                        explanation.get('danger_level'),
+                        explanation.get('explanation_it'),
+                        explanation.get('advice'),
+                        row['id'],
+                    ),
+                )
+                updated += 1
+        conn.commit()
+
+    return {'removed': removed, 'updated': updated}
 
 
 def fetch_events(limit: int = 200) -> List[Dict[str, Any]]:
