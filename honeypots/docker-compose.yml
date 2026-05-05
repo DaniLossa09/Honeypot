@@ -12,6 +12,7 @@ services:
   cowrie:
     build: ./cowrie
     container_name: cowrie
+    user: "999:999"
     restart: unless-stopped
     ports:
       - "22:2222"    # SSH

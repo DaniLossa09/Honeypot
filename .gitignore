@@ -1,1 +1,22 @@
 .venv/
+__pycache__/
+*.py[cod]
+
+# Runtime database, state, exports and generated logs.
+data/*.db
+data/events.json
+data/exports/*
+!data/exports/.gitkeep
+data/state/*
+!data/state/.gitkeep
+honeypots/logs/*
+!honeypots/logs/.gitkeep
+!honeypots/logs/cowrie/
+honeypots/logs/cowrie/*
+!honeypots/logs/cowrie/.gitkeep
+!honeypots/logs/ftp/
+honeypots/logs/ftp/*
+!honeypots/logs/ftp/.gitkeep
+!honeypots/logs/opencanary/
+honeypots/logs/opencanary/*
+!honeypots/logs/opencanary/.gitkeep

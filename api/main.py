@@ -7,7 +7,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import FRONTEND_ORIGIN, POLL_INTERVAL_SECONDS
-from backend.db import fetch_attack_distribution, fetch_event_by_id, fetch_events, fetch_map_points, fetch_stats
+from backend.db import (
+    fetch_attack_distribution,
+    fetch_event_by_id,
+    fetch_event_context,
+    fetch_events,
+    fetch_map_points,
+    fetch_stats,
+    fetch_storylines,
+)
 from backend.processor import Processor
 
 processor = Processor()
@@ -70,9 +78,24 @@ def get_map_points() -> List[Dict[str, Any]]:
     return fetch_map_points()
 
 
+@app.get('/storylines')
+def get_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+    safe_limit = max(1, min(limit, 200))
+    return fetch_storylines(limit=safe_limit)
+
+
 @app.get('/event/{event_id}')
 def get_event(event_id: int) -> Dict[str, Any]:
     event = fetch_event_by_id(event_id)
     if not event:
         raise HTTPException(status_code=404, detail='Event not found')
     return event
+
+
+@app.get('/event/{event_id}/context')
+def get_event_context(event_id: int, limit: int = 80) -> Dict[str, Any]:
+    safe_limit = max(1, min(limit, 200))
+    context = fetch_event_context(event_id, limit=safe_limit)
+    if not context:
+        raise HTTPException(status_code=404, detail='Event not found')
+    return context

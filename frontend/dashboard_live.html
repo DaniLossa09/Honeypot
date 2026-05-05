@@ -289,6 +289,100 @@
   /* ── TABELLA EVENTI ── */
   .events-section { margin-bottom: 24px; }
 
+  .storyline-section { margin-bottom: 24px; }
+
+  .storyline-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .storyline-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.025);
+    padding: 14px;
+    min-width: 0;
+  }
+
+  .storyline-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .storyline-title {
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .storyline-ip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent2);
+    margin-top: 3px;
+  }
+
+  .storyline-summary {
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .storyline-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .storyline-chip {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 7px;
+  }
+
+  .storyline-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .storyline-step {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 8px;
+    align-items: start;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .storyline-step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 4px;
+  }
+
+  .storyline-step strong {
+    display: block;
+    color: var(--text);
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
   .events-controls {
     display: flex;
     align-items: center;
@@ -514,6 +608,79 @@
     color: var(--text);
   }
 
+  .raw-section {
+    background: rgba(255,255,255,0.035);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+
+  .raw-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--warn);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .raw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .raw-item {
+    border: 1px solid rgba(26,35,50,0.8);
+    border-radius: 8px;
+    background: rgba(8,12,16,0.55);
+    padding: 12px;
+  }
+
+  .raw-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .raw-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .raw-field {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(26,35,50,0.7);
+    border-radius: 5px;
+    padding: 5px 7px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .raw-field span { color: var(--text); }
+
+  .raw-json {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 170px;
+    overflow-y: auto;
+    border-top: 1px solid rgba(26,35,50,0.7);
+    padding-top: 8px;
+  }
+
   .no-explanation {
     color: var(--muted);
     font-size: 13px;
@@ -541,6 +708,8 @@
   @media (max-width: 900px) {
     .stats-row { grid-template-columns: repeat(2, 1fr); }
     .middle-row { grid-template-columns: 1fr; }
+    .storyline-list { grid-template-columns: 1fr; }
+    .raw-fields { grid-template-columns: 1fr; }
     main { padding: 16px; }
   }
 </style>
@@ -608,6 +777,16 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ATTACK STORYLINE -->
+  <div class="card storyline-section">
+    <div class="card-header">
+      <div class="card-title"><div class="dot"></div> ATTACK STORYLINE</div>
+    </div>
+    <div class="storyline-list" id="storylineList">
+      <div class="empty">Caricamento storyline...</div>
+    </div>
   </div>
 
   <!-- TABELLA EVENTI -->
@@ -698,6 +877,16 @@ function formatTimestamp(value) {
   return Number.isNaN(ts.getTime()) ? 'n/d' : ts.toLocaleString('it-IT');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 function updateClock() {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('it-IT');
 }
@@ -709,11 +898,12 @@ async function fetchJson(path) {
 }
 
 async function refreshDashboard() {
-  const [statsResult, distributionResult, mapPointsResult, eventsResult] = await Promise.allSettled([
+  const [statsResult, distributionResult, mapPointsResult, eventsResult, storylinesResult] = await Promise.allSettled([
     fetchJson('/stats'),
     fetchJson('/attack-distribution'),
     fetchJson('/map-points'),
     fetchJson('/events?limit=200'),
+    fetchJson('/storylines?limit=9'),
   ]);
 
   if (statsResult.status === 'fulfilled') {
@@ -742,6 +932,13 @@ async function refreshDashboard() {
   } else {
     console.error('Events refresh failed:', eventsResult.reason);
     allEvents = [];
+  }
+
+  if (storylinesResult.status === 'fulfilled') {
+    renderStorylines(Array.isArray(storylinesResult.value) ? storylinesResult.value : []);
+  } else {
+    console.error('Storyline refresh failed:', storylinesResult.reason);
+    renderStorylines([]);
   }
 
   applyCurrentFilter();
@@ -841,6 +1038,52 @@ function renderChart(distribution) {
   });
 }
 
+function renderStorylines(storylines) {
+  const list = document.getElementById('storylineList');
+  if (!storylines.length) {
+    list.innerHTML = '<div class="empty">Nessuna storyline disponibile</div>';
+    return;
+  }
+
+  list.innerHTML = storylines.map(story => {
+    const danger = story.danger_level || 'Basso';
+    const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+    const services = Array.isArray(story.services) ? story.services.map(s => String(s || 'unknown').toUpperCase()).join(', ') : 'UNKNOWN';
+    const events = Array.isArray(story.events) ? story.events.slice(0, 4) : [];
+    const extra = (story.event_count || 0) > events.length ? `<div class="storyline-chip">+${story.event_count - events.length} altri step</div>` : '';
+
+    return `
+      <div class="storyline-item">
+        <div class="storyline-top">
+          <div>
+            <div class="storyline-title">${escapeHtml(story.title || 'Storyline')}</div>
+            <div class="storyline-ip">${escapeHtml(story.ip || 'n/d')} · ${escapeHtml(story.city || 'Unknown')}, ${escapeHtml(story.country || 'Unknown')}</div>
+          </div>
+          <span class="badge ${badgeClass}">${escapeHtml(danger)}</span>
+        </div>
+        <div class="storyline-summary">${escapeHtml(story.summary || 'Sequenza di incidenti correlati.')}</div>
+        <div class="storyline-meta">
+          <div class="storyline-chip">${story.event_count || 0} eventi</div>
+          <div class="storyline-chip">${escapeHtml(services)}</div>
+          <div class="storyline-chip">${formatTimestamp(story.first_seen)} → ${formatTimestamp(story.last_seen)}</div>
+        </div>
+        <div class="storyline-steps">
+          ${events.map(step => `
+            <div class="storyline-step" onclick="openModal(${Number(step.id) || 0})">
+              <div class="storyline-step-dot"></div>
+              <div>
+                <strong>${escapeHtml(step.attack_type || 'Unknown')}</strong>
+                <span>${formatTimestamp(step.timestamp)} · ${escapeHtml((step.service || 'unknown').toUpperCase())}</span>
+              </div>
+            </div>
+          `).join('')}
+          ${extra}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderTable(events) {
   const tbody = document.getElementById('eventsBody');
   if (!events.length) {
@@ -878,9 +1121,57 @@ function filterEvents(level, btn) {
   applyCurrentFilter();
 }
 
+function rawField(label, value) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<div class="raw-field">${escapeHtml(label)}: <span>${escapeHtml(value)}</span></div>`;
+}
+
+function renderRawContext(rawEvents) {
+  if (!Array.isArray(rawEvents) || !rawEvents.length) {
+    return `
+      <div class="raw-section">
+        <div class="raw-label">DETTAGLI TECNICI</div>
+        <div class="no-explanation">Nessun raw event correlato disponibile.</div>
+      </div>`;
+  }
+
+  return `
+    <div class="raw-section">
+      <div class="raw-label">DETTAGLI TECNICI</div>
+      <div class="raw-list">
+        ${rawEvents.map(item => {
+          const rawJson = JSON.stringify(item.raw_event || {}, null, 2);
+          return `
+            <div class="raw-item">
+              <div class="raw-item-head">
+                <span>${formatTimestamp(item.timestamp)}</span>
+                <span>${escapeHtml((item.source || 'unknown').toUpperCase())} · ${escapeHtml((item.service || 'unknown').toUpperCase())}</span>
+              </div>
+              <div class="raw-fields">
+                ${rawField('IP', item.ip)}
+                ${rawField('Porta', item.port)}
+                ${rawField('Evento', item.eventid || item.event_type)}
+                ${rawField('Sessione', item.session)}
+                ${rawField('Username', item.username)}
+                ${rawField('Password', item.password)}
+                ${rawField('Comando', item.command)}
+                ${rawField('Argomento', item.argument)}
+                ${rawField('Path/URI', item.path || item.uri)}
+                ${rawField('User-Agent', item.user_agent)}
+              </div>
+              <div class="raw-json">${escapeHtml(rawJson)}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 async function openModal(id) {
   try {
-    const ev = await fetchJson(`/event/${id}`);
+    const [ev, context] = await Promise.all([
+      fetchJson(`/event/${id}`),
+      fetchJson(`/event/${id}/context?limit=80`).catch(() => ({ raw_events: [] })),
+    ]);
     document.getElementById('modalTitle').textContent = ev.attack_type || 'Unknown';
     const danger = ev.danger_level || 'Basso';
     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
@@ -901,7 +1192,8 @@ async function openModal(id) {
       <div class="advice-section">
         <div class="advice-label">💡 COME DIFENDERSI</div>
         <div class="advice-text">${ev.advice || 'Nessun consiglio disponibile.'}</div>
-      </div>`;
+      </div>
+      ${renderRawContext(context.raw_events)}`;
 
     document.getElementById('modalOverlay').classList.add('open');
   } catch (err) {

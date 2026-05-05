@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from .classifier import classify_attack, classify_signal
 from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
-from .db import fetch_events, init_db, insert_event, reconcile_events
+from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events
 from .explainer import explain_attack
 from .geolocation import GeoResolver
 from .parsers import read_incremental
@@ -19,9 +19,17 @@ class Processor:
     def __init__(self):
         init_db()
         self.signal_history: Dict[str, List[float]] = {}
-        reconcile_events(classify_attack, explain_attack, self._event_hash)
+        reconcile_events(self._reconcile_attack_type, explain_attack, self._event_hash)
         self.geo = GeoResolver()
         self.offsets = self._load_offsets()
+
+    def _reconcile_attack_type(self, record: Dict) -> str | None:
+        attack_type = classify_attack(record)
+        if attack_type:
+            return attack_type
+        if record.get('attack_type') == 'Credential Attack':
+            return 'Credential Attack'
+        return None
 
     def _load_offsets(self) -> Dict[str, int]:
         if not OFFSETS_PATH.exists():
@@ -58,13 +66,11 @@ class Processor:
         return '|'.join([source, ip, service, attack_type, str(ts_bucket)])
 
     def _signal_key(self, record: Dict, attack_type: str) -> str:
-        username = str(record.get('username') or '')
         return '|'.join([
             str(record.get('source') or ''),
             str(record.get('ip') or 'unknown'),
             str(record.get('service') or ''),
             attack_type,
-            username,
         ])
 
     def _signal_threshold_met(self, record: Dict, attack_type: str) -> bool:
@@ -89,6 +95,7 @@ class Processor:
             records, new_offset = read_incremental(source, path, current_offset)
             self.offsets[source] = new_offset
             for record in records:
+                insert_raw_event(record)
                 attack_type = classify_attack(record)
                 if not attack_type:
                     signal_type = classify_signal(record)
