@@ -1,0 +1,6 @@
+{
+  "username": "admin",
+  "password_hash": "pbkdf2_sha256$200000$replace-this-salt$replace-this-hash",
+  "token_secret": "replace-this-with-a-long-random-secret",
+  "token_ttl_seconds": 28800
+}

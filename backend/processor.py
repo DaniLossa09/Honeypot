@@ -4,10 +4,11 @@ from typing import Dict, List
 
 from .classifier import classify_attack, classify_signal
 from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
-from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events
+from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
 from .explainer import explain_attack
 from .geolocation import GeoResolver
 from .parsers import read_incremental
+from .settings import load_attack_settings
 from .utils import sha256_text
 
 
@@ -19,9 +20,14 @@ class Processor:
     def __init__(self):
         init_db()
         self.signal_history: Dict[str, List[float]] = {}
+        self.attack_settings = load_attack_settings()
         reconcile_events(self._reconcile_attack_type, explain_attack, self._event_hash)
         self.geo = GeoResolver()
         self.offsets = self._load_offsets()
+
+    def reload_attack_settings(self) -> Dict:
+        self.attack_settings = load_attack_settings()
+        return self.attack_settings
 
     def _reconcile_attack_type(self, record: Dict) -> str | None:
         attack_type = classify_attack(record)
@@ -59,9 +65,14 @@ class Processor:
         source = str(event.get('source', ''))
         ip = str(event.get('ip') or 'unknown')
         service = str(event.get('service') or '')
-        ts_bucket = int(self._event_ts(event) // self.INCIDENT_BUCKET_SECONDS)
+        bucket_seconds = int(self.attack_settings.get('incident_bucket_seconds') or self.INCIDENT_BUCKET_SECONDS)
+        ts_bucket = int(self._event_ts(event) // bucket_seconds)
 
-        if attack_type == 'Post-Login Activity' and raw_event.get('session'):
+        if (
+            attack_type == 'Post-Login Activity'
+            and raw_event.get('session')
+            and self.attack_settings.get('post_login_dedupe_by_session', True)
+        ):
             return '|'.join([source, ip, service, attack_type, str(raw_event.get('session'))])
         return '|'.join([source, ip, service, attack_type, str(ts_bucket)])
 
@@ -76,11 +87,35 @@ class Processor:
     def _signal_threshold_met(self, record: Dict, attack_type: str) -> bool:
         key = self._signal_key(record, attack_type)
         now = self._event_ts(record)
-        cutoff = now - self.CREDENTIAL_WINDOW_SECONDS
+        threshold = int(self.attack_settings.get('credential_threshold') or self.CREDENTIAL_THRESHOLD)
+        window_seconds = int(self.attack_settings.get('credential_window_seconds') or self.CREDENTIAL_WINDOW_SECONDS)
+        cutoff = now - window_seconds
         history = [ts for ts in self.signal_history.get(key, []) if ts >= cutoff]
         history.append(now)
         self.signal_history[key] = history
-        return len(history) >= self.CREDENTIAL_THRESHOLD
+        return len(history) >= threshold
+
+    def _source_enabled(self, source: str) -> bool:
+        enabled_sources = self.attack_settings.get('enabled_sources') or {}
+        return bool(enabled_sources.get(source, True))
+
+    def _attack_enabled(self, attack_type: str) -> bool:
+        key_map = {
+            'Unauthorized Login': 'unauthorized_login',
+            'Post-Login Activity': 'post_login_activity',
+            'SQL Injection': 'sql_injection',
+            'XSS Attack': 'xss',
+            'IDOR Attempt': 'idor',
+            'Command Injection': 'command_injection',
+            'Malware Upload': 'malware_upload',
+            'Web Crawl / Recon': 'web_recon',
+            'FTP Attack': 'ftp_transfer',
+        }
+        key = key_map.get(attack_type)
+        if not key:
+            return True
+        enabled_attacks = self.attack_settings.get('enabled_direct_attacks') or {}
+        return bool(enabled_attacks.get(key, True))
 
     def _event_hash(self, event: Dict) -> str:
         raw = '|'.join([
@@ -89,14 +124,19 @@ class Processor:
         return sha256_text(raw)
 
     def process_once(self) -> int:
+        self.reload_attack_settings()
         inserted_count = 0
         for source, path in LOG_PATHS.items():
+            if not self._source_enabled(source):
+                continue
             current_offset = self.offsets.get(source, 0)
             records, new_offset = read_incremental(source, path, current_offset)
             self.offsets[source] = new_offset
             for record in records:
                 insert_raw_event(record)
                 attack_type = classify_attack(record)
+                if attack_type and not self._attack_enabled(attack_type):
+                    attack_type = None
                 if not attack_type:
                     signal_type = classify_signal(record)
                     if signal_type and self._signal_threshold_met(record, signal_type):
@@ -112,6 +152,12 @@ class Processor:
         self._save_offsets()
         self.export_events_json()
         return inserted_count
+
+    def reset_attacks(self) -> Dict[str, int]:
+        self.signal_history.clear()
+        result = reset_events()
+        self.export_events_json()
+        return result
 
     def export_events_json(self, limit: int = 500) -> None:
         events = fetch_events(limit=limit)

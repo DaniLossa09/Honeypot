@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-from .config import DB_PATH
+from .config import DB_PATH, EVENTS_EXPORT_PATH
 from .utils import sha256_text
 
 SCHEMA = '''
@@ -62,18 +62,19 @@ CREATE INDEX IF NOT EXISTS idx_raw_events_timestamp ON raw_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_raw_events_session ON raw_events(session);
 '''
 
-def reset_events():
-	"""Cancella tutti gli eventi dal database e resetta il file JSON"""
-	with get_conn() as conn:
-		conn.execute("DELETE FROM events")
-		conn.commit()
+def reset_events() -> Dict[str, int]:
+    """Cancella incidenti e dettagli raw gia importati, senza toccare i log sorgente."""
+    with get_conn() as conn:
+        events_count = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+        raw_count = conn.execute('SELECT COUNT(*) FROM raw_events').fetchone()[0]
+        conn.execute('DELETE FROM events')
+        conn.execute('DELETE FROM raw_events')
+        conn.commit()
 
-	data_dir = os.path.dirname(DB_PATH)
-	json_path = os.path.join(data_dir, "events.json")
-	with open(json_path, "w") as f:
-		json.dump([], f)
+    EVENTS_EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    EVENTS_EXPORT_PATH.write_text('[]', encoding='utf-8')
 
-	print("[DB] Database e events.json azzerati.")
+    return {'events_deleted': events_count, 'raw_events_deleted': raw_count}
 
 
 def init_db() -> None:
@@ -246,19 +247,81 @@ def reconcile_events(
     return {'removed': removed, 'updated': updated}
 
 
+def _risk_band(score: int) -> str:
+    if score >= 80:
+        return 'Critico'
+    if score >= 60:
+        return 'Alto'
+    if score >= 35:
+        return 'Medio'
+    return 'Basso'
+
+
+def _event_risk_score(event: Dict[str, Any], raw_events: Optional[List[Dict[str, Any]]] = None) -> int:
+    attack_type = event.get('attack_type') or 'Unknown'
+    danger = event.get('danger_level') or 'Basso'
+    raw_events = raw_events or []
+
+    score = {
+        'Web Crawl / Recon': 22,
+        'Port Scan': 24,
+        'Credential Attack': 42,
+        'FTP Attack': 50,
+        'Post-Login Activity': 58,
+        'XSS Attack': 60,
+        'IDOR Attempt': 62,
+        'Unauthorized Login': 75,
+        'SQL Injection': 78,
+        'Command Injection': 86,
+        'Malware Upload': 90,
+        'SMB Attack': 82,
+    }.get(attack_type, 35)
+
+    score += {'Alto': 8, 'Medio': 4, 'Basso': 0}.get(danger, 0)
+
+    credential_attempts = len([
+        item for item in raw_events
+        if item.get('username') is not None or item.get('password') is not None
+    ])
+    commands = {str(item.get('command') or '').strip().lower() for item in raw_events if item.get('command')}
+    paths = {str(item.get('path') or item.get('uri') or '').strip() for item in raw_events if item.get('path') or item.get('uri')}
+    sessions = {str(item.get('session') or '').strip() for item in raw_events if item.get('session')}
+
+    if credential_attempts >= 3:
+        score += min(18, credential_attempts * 3)
+    if commands:
+        score += min(16, len(commands) * 4)
+    if commands & {'wget', 'curl', 'chmod', 'bash', 'sh', 'nc', 'netcat'}:
+        score += 12
+    if len(paths) >= 5:
+        score += 8
+    if len(sessions) > 1:
+        score += 6
+
+    return max(0, min(score, 100))
+
+
+def _enrich_event_risk(event: Dict[str, Any], raw_events: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    enriched = dict(event)
+    score = _event_risk_score(enriched, raw_events=raw_events)
+    enriched['risk_score'] = score
+    enriched['risk_level'] = _risk_band(score)
+    return enriched
+
+
 def fetch_events(limit: int = 200) -> List[Dict[str, Any]]:
     with get_conn() as conn:
         rows = conn.execute(
             'SELECT * FROM events ORDER BY datetime(timestamp) DESC, id DESC LIMIT ?',
             (limit,)
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_enrich_event_risk(dict(r)) for r in rows]
 
 
 def fetch_event_by_id(event_id: int) -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
-    return dict(row) if row else None
+    return _enrich_event_risk(dict(row)) if row else None
 
 
 def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
@@ -366,7 +429,111 @@ def fetch_event_context(event_id: int, limit: int = 80) -> Optional[Dict[str, An
             'raw_event': raw_event,
         }))
 
-    return {'event': event, 'raw_events': raw_events}
+    return {'event': _enrich_event_risk(event, raw_events=raw_events), 'raw_events': raw_events}
+
+
+def _unique_values(rows: Iterable[Dict[str, Any]], field: str, limit: int = 12) -> List[str]:
+    values = []
+    seen = set()
+    for row in rows:
+        value = str(row.get(field) or '').strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+        if len(values) >= limit:
+            break
+    return values
+
+
+def _incident_reason(event: Dict[str, Any], raw_events: List[Dict[str, Any]]) -> str:
+    attack_type = event.get('attack_type') or 'Unknown'
+    service = str(event.get('service') or '').upper()
+    raw_event = _parse_raw_event(event)
+    eventid = raw_event.get('eventid') or event.get('eventid')
+    session = raw_event.get('session')
+
+    if attack_type == 'Credential Attack':
+        attempts = len([
+            item for item in raw_events
+            if item.get('username') is not None or item.get('password') is not None
+        ])
+        return (
+            f"Segnalato perche lo stesso IP ha inviato credenziali verso {service or 'il servizio'} "
+            f"piu volte nella finestra di correlazione. Tentativi correlati: {attempts or len(raw_events)}."
+        )
+    if attack_type == 'Unauthorized Login':
+        username = raw_event.get('username') or event.get('username')
+        return (
+            f"Segnalato perche Cowrie ha registrato un login riuscito"
+            f"{f' con utente {username}' if username else ''}. In produzione sarebbe accesso non autorizzato riuscito."
+        )
+    if attack_type == 'Post-Login Activity':
+        commands = _unique_values(raw_events, 'command', limit=5)
+        suffix = f" Comandi osservati: {', '.join(commands)}." if commands else ''
+        return (
+            f"Segnalato perche dopo il login sono stati eseguiti comandi nella sessione"
+            f"{f' {session}' if session else ''}.{suffix}"
+        )
+    if attack_type in {'SQL Injection', 'XSS Attack', 'IDOR Attempt', 'Command Injection'}:
+        paths = _unique_values(raw_events, 'path', limit=3) or _unique_values(raw_events, 'uri', limit=3)
+        suffix = f" Endpoint coinvolti: {', '.join(paths)}." if paths else ''
+        return f"Segnalato perche il payload contiene pattern compatibili con {attack_type}.{suffix}"
+    if attack_type == 'FTP Attack':
+        commands = _unique_values(raw_events, 'command', limit=5)
+        suffix = f" Comandi FTP osservati: {', '.join(commands)}." if commands else ''
+        return f"Segnalato perche l'IP ha usato comandi FTP operativi o di trasferimento file.{suffix}"
+    if attack_type == 'Web Crawl / Recon':
+        paths = _unique_values(raw_events, 'path', limit=5) or _unique_values(raw_events, 'uri', limit=5)
+        suffix = f" Path osservati: {', '.join(paths)}." if paths else ''
+        return f"Segnalato perche sono stati richiesti path o user-agent tipici di scansione/ricognizione.{suffix}"
+    if eventid:
+        return f"Segnalato perche l'evento sorgente {eventid} e stato classificato come {attack_type}."
+    return f"Segnalato perche il comportamento osservato e stato classificato come {attack_type}."
+
+
+def fetch_incident_detail(event_id: int, limit: int = 120) -> Optional[Dict[str, Any]]:
+    context = fetch_event_context(event_id, limit=limit)
+    if not context:
+        return None
+
+    event = _enrich_event_risk(context['event'], raw_events=context['raw_events'])
+    raw_events = context['raw_events']
+    timeline = []
+    for item in raw_events:
+        timeline.append({
+            'kind': 'raw',
+            'timestamp': item.get('timestamp'),
+            'service': item.get('service'),
+            'event_type': item.get('eventid') or item.get('event_type') or 'Raw Event',
+            'summary': item.get('summary') or '',
+        })
+    timeline.append({
+        'kind': 'incident',
+        'timestamp': event.get('timestamp'),
+        'service': event.get('service'),
+        'event_type': event.get('attack_type'),
+        'summary': event.get('explanation_it') or event.get('attack_type') or '',
+    })
+    timeline = sorted(
+        timeline,
+        key=lambda item: (item.get('timestamp') or '', 0 if item.get('kind') == 'raw' else 1),
+    )
+
+    return {
+        'event': event,
+        'raw_events': raw_events,
+        'technical_reason': _incident_reason(event, raw_events),
+        'evidence': {
+            'usernames': _top_counts(item.get('username') for item in raw_events),
+            'passwords': _top_counts(item.get('password') for item in raw_events),
+            'commands': _top_counts(item.get('command') for item in raw_events),
+            'paths': _top_counts((item.get('path') or item.get('uri')) for item in raw_events),
+            'user_agents': _top_counts(item.get('user_agent') for item in raw_events),
+            'sessions': _top_counts(item.get('session') for item in raw_events),
+        },
+        'timeline': timeline[-limit:],
+    }
 
 
 def _danger_score(level: Optional[str]) -> int:
@@ -426,6 +593,19 @@ def _storyline_summary(story: Dict[str, Any]) -> str:
     )
 
 
+def _top_counts(values: Iterable[Any], limit: int = 10) -> List[Dict[str, Any]]:
+    counts: Dict[str, int] = {}
+    for value in values:
+        text = str(value or '').strip()
+        if not text:
+            continue
+        counts[text] = counts.get(text, 0) + 1
+    return [
+        {'value': value, 'count': count}
+        for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+    ]
+
+
 def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
     rows = fetch_events(limit=max(limit * 10, limit))
     stories: Dict[str, Dict[str, Any]] = {}
@@ -443,6 +623,8 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
             'last_seen': row.get('timestamp'),
             'event_count': 0,
             'danger_level': row.get('danger_level') or 'Basso',
+            'risk_score': row.get('risk_score') or 0,
+            'risk_level': row.get('risk_level') or 'Basso',
             'attack_types': [],
             'services': [],
             'events': [],
@@ -456,6 +638,9 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
             story['services'].append(service)
         if _danger_score(row.get('danger_level')) > _danger_score(story.get('danger_level')):
             story['danger_level'] = row.get('danger_level') or story['danger_level']
+        if int(row.get('risk_score') or 0) > int(story.get('risk_score') or 0):
+            story['risk_score'] = int(row.get('risk_score') or 0)
+            story['risk_level'] = row.get('risk_level') or _risk_band(story['risk_score'])
 
         story['event_count'] += 1
         story['first_seen'] = _min_timestamp(story.get('first_seen'), row.get('timestamp'))
@@ -466,6 +651,8 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
             'attack_type': attack_type,
             'service': service,
             'danger_level': row.get('danger_level') or 'Basso',
+            'risk_score': row.get('risk_score') or 0,
+            'risk_level': row.get('risk_level') or 'Basso',
             'explanation_it': row.get('explanation_it'),
             'advice': row.get('advice'),
         })
@@ -484,11 +671,108 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
         result,
         key=lambda story: (
             _danger_score(story.get('danger_level')),
+            story.get('risk_score') or 0,
             story.get('last_seen') or '',
             story.get('event_count') or 0,
         ),
         reverse=True,
     )[:limit]
+
+
+def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        event_rows = conn.execute(
+            '''
+            SELECT * FROM events
+            WHERE ip = ?
+            ORDER BY datetime(timestamp) ASC, id ASC
+            LIMIT ?
+            ''',
+            (ip, limit),
+        ).fetchall()
+        raw_rows = conn.execute(
+            '''
+            SELECT * FROM raw_events
+            WHERE ip = ?
+            ORDER BY datetime(timestamp) ASC, id ASC
+            LIMIT ?
+            ''',
+            (ip, max(limit * 3, limit)),
+        ).fetchall()
+
+    if not event_rows and not raw_rows:
+        return None
+
+    raw_events = [_compact_raw_event(_row_dict(row)) for row in raw_rows]
+    events = [_enrich_event_risk(dict(row), raw_events=raw_events) for row in event_rows]
+    all_timestamps = [
+        item.get('timestamp')
+        for item in [*events, *raw_events]
+        if item.get('timestamp')
+    ]
+
+    services = sorted({str(item.get('service') or 'unknown') for item in [*events, *raw_events]})
+    attack_types = sorted({str(item.get('attack_type') or 'Unknown') for item in events})
+    countries = [event.get('country') for event in events if event.get('country')]
+    cities = [event.get('city') for event in events if event.get('city')]
+    danger_levels = [event.get('danger_level') for event in events]
+    risk_score = min(
+        100,
+        max([int(event.get('risk_score') or 0) for event in events] or [0])
+        + min(18, max(0, len(events) - 1) * 4)
+        + min(12, max(0, len(services) - 1) * 6)
+        + min(10, max(0, len(raw_events) - 5)),
+    )
+
+    timeline = []
+    for event in events:
+        timeline.append({
+            'kind': 'incident',
+            'id': event.get('id'),
+            'timestamp': event.get('timestamp'),
+            'service': event.get('service'),
+            'attack_type': event.get('attack_type'),
+            'danger_level': event.get('danger_level') or 'Basso',
+            'summary': event.get('explanation_it') or event.get('attack_type') or '',
+        })
+    for raw in raw_events:
+        timeline.append({
+            'kind': 'raw',
+            'id': raw.get('id'),
+            'timestamp': raw.get('timestamp'),
+            'service': raw.get('service'),
+            'attack_type': raw.get('eventid') or raw.get('event_type') or 'Raw Event',
+            'danger_level': None,
+            'summary': raw.get('summary') or '',
+        })
+
+    timeline = sorted(
+        timeline,
+        key=lambda item: (item.get('timestamp') or '', 0 if item.get('kind') == 'raw' else 1, item.get('id') or 0),
+    )[:limit]
+
+    return {
+        'ip': ip,
+        'country': countries[-1] if countries else 'Unknown',
+        'city': cities[-1] if cities else 'Unknown',
+        'first_seen': min(all_timestamps) if all_timestamps else None,
+        'last_seen': max(all_timestamps) if all_timestamps else None,
+        'event_count': len(events),
+        'raw_event_count': len(raw_events),
+        'danger_level': max(danger_levels, key=_danger_score) if danger_levels else 'Basso',
+        'risk_score': risk_score,
+        'risk_level': _risk_band(risk_score),
+        'services': services,
+        'attack_types': attack_types,
+        'top_usernames': _top_counts(raw.get('username') for raw in raw_events),
+        'top_passwords': _top_counts(raw.get('password') for raw in raw_events),
+        'top_commands': _top_counts(raw.get('command') for raw in raw_events),
+        'top_paths': _top_counts((raw.get('path') or raw.get('uri')) for raw in raw_events),
+        'top_user_agents': _top_counts((raw.get('user_agent') for raw in raw_events), limit=8),
+        'events': events[-limit:],
+        'raw_events': raw_events[-limit:],
+        'timeline': timeline,
+    }
 
 
 def fetch_stats() -> Dict[str, Any]:

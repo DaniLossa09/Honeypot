@@ -1,0 +1,2034 @@
+diff --git a/.gitignore b/.gitignore
+index f89ff35..7c3e4aa 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,7 @@
+ .venv/
+ __pycache__/
+ *.py[cod]
++config/dashboard_auth.json
+ 
+ # Runtime database, state, exports and generated logs.
+ data/*.db
+diff --git a/api/main.py b/api/main.py
+index 1d9d6a9..c4310b5 100755
+--- a/api/main.py
++++ b/api/main.py
+@@ -3,24 +3,36 @@ import asyncio
+ from contextlib import asynccontextmanager
+ from typing import Any, Dict, List
+ 
+-from fastapi import FastAPI, HTTPException
++from fastapi import Depends, FastAPI, Header, HTTPException
++from fastapi.responses import FileResponse
+ from fastapi.middleware.cors import CORSMiddleware
+ 
++from backend.auth import AuthError, authenticate, verify_authorization_header
+ from backend.config import FRONTEND_ORIGIN, POLL_INTERVAL_SECONDS
+ from backend.db import (
+     fetch_attack_distribution,
+     fetch_event_by_id,
+     fetch_event_context,
+     fetch_events,
++    fetch_incident_detail,
++    fetch_ip_detail,
+     fetch_map_points,
+     fetch_stats,
+     fetch_storylines,
+ )
+ from backend.processor import Processor
++from backend.reports import export_incident_report, export_ip_report
+ 
+ processor = Processor()
+ 
+ 
++def require_auth(authorization: str = Header(default='')) -> Dict[str, Any]:
++    try:
++        return verify_authorization_header(authorization)
++    except AuthError as exc:
++        raise HTTPException(status_code=401, detail=str(exc)) from exc
++
++
+ async def background_processor():
+     while True:
+         try:
+@@ -57,35 +69,55 @@ def health() -> Dict[str, Any]:
+     return {'status': 'ok'}
+ 
+ 
++@app.post('/auth/login')
++def login(credentials: Dict[str, str]) -> Dict[str, Any]:
++    try:
++        token = authenticate(credentials.get('username') or '', credentials.get('password') or '')
++    except AuthError as exc:
++        raise HTTPException(status_code=401, detail=str(exc)) from exc
++    return {'access_token': token, 'token_type': 'bearer'}
++
++
++@app.get('/auth/me')
++def auth_me(user: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
++    return {'username': user.get('sub')}
++
++
+ @app.get('/events')
+-def get_events(limit: int = 200) -> List[Dict[str, Any]]:
++def get_events(limit: int = 200, _: Dict[str, Any] = Depends(require_auth)) -> List[Dict[str, Any]]:
+     safe_limit = max(1, min(limit, 1000))
+     return fetch_events(limit=safe_limit)
+ 
+ 
+ @app.get('/stats')
+-def get_stats() -> Dict[str, Any]:
++def get_stats(_: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
+     return fetch_stats()
+ 
+ 
+ @app.get('/attack-distribution')
+-def get_attack_distribution() -> List[Dict[str, Any]]:
++def get_attack_distribution(_: Dict[str, Any] = Depends(require_auth)) -> List[Dict[str, Any]]:
+     return fetch_attack_distribution()
+ 
+ 
+ @app.get('/map-points')
+-def get_map_points() -> List[Dict[str, Any]]:
++def get_map_points(_: Dict[str, Any] = Depends(require_auth)) -> List[Dict[str, Any]]:
+     return fetch_map_points()
+ 
+ 
+ @app.get('/storylines')
+-def get_storylines(limit: int = 50) -> List[Dict[str, Any]]:
++def get_storylines(limit: int = 50, _: Dict[str, Any] = Depends(require_auth)) -> List[Dict[str, Any]]:
+     safe_limit = max(1, min(limit, 200))
+     return fetch_storylines(limit=safe_limit)
+ 
+ 
++@app.post('/reset-attacks')
++def reset_attacks(_: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
++    result = processor.reset_attacks()
++    return {'status': 'ok', **result}
++
++
+ @app.get('/event/{event_id}')
+-def get_event(event_id: int) -> Dict[str, Any]:
++def get_event(event_id: int, _: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
+     event = fetch_event_by_id(event_id)
+     if not event:
+         raise HTTPException(status_code=404, detail='Event not found')
+@@ -93,9 +125,69 @@ def get_event(event_id: int) -> Dict[str, Any]:
+ 
+ 
+ @app.get('/event/{event_id}/context')
+-def get_event_context(event_id: int, limit: int = 80) -> Dict[str, Any]:
++def get_event_context(
++    event_id: int,
++    limit: int = 80,
++    _: Dict[str, Any] = Depends(require_auth),
++) -> Dict[str, Any]:
+     safe_limit = max(1, min(limit, 200))
+     context = fetch_event_context(event_id, limit=safe_limit)
+     if not context:
+         raise HTTPException(status_code=404, detail='Event not found')
+     return context
++
++
++@app.get('/incident/{event_id}/detail')
++def get_incident_detail(
++    event_id: int,
++    limit: int = 120,
++    _: Dict[str, Any] = Depends(require_auth),
++) -> Dict[str, Any]:
++    safe_limit = max(1, min(limit, 250))
++    detail = fetch_incident_detail(event_id, limit=safe_limit)
++    if not detail:
++        raise HTTPException(status_code=404, detail='Event not found')
++    return detail
++
++
++@app.get('/incident/{event_id}/export')
++def export_incident(
++    event_id: int,
++    format: str = 'html',
++    _: Dict[str, Any] = Depends(require_auth),
++) -> FileResponse:
++    report_format = 'json' if format == 'json' else 'html'
++    try:
++        path = export_incident_report(event_id, report_format=report_format)
++    except ValueError as exc:
++        raise HTTPException(status_code=404, detail=str(exc)) from exc
++    media_type = 'application/json' if report_format == 'json' else 'text/html'
++    return FileResponse(path, media_type=media_type, filename=path.name)
++
++
++@app.get('/ip/{ip}/detail')
++def get_ip_detail(
++    ip: str,
++    limit: int = 200,
++    _: Dict[str, Any] = Depends(require_auth),
++) -> Dict[str, Any]:
++    safe_limit = max(1, min(limit, 500))
++    detail = fetch_ip_detail(ip, limit=safe_limit)
++    if not detail:
++        raise HTTPException(status_code=404, detail='IP not found')
++    return detail
++
++
++@app.get('/ip/{ip}/export')
++def export_ip(
++    ip: str,
++    format: str = 'html',
++    _: Dict[str, Any] = Depends(require_auth),
++) -> FileResponse:
++    report_format = 'json' if format == 'json' else 'html'
++    try:
++        path = export_ip_report(ip, report_format=report_format)
++    except ValueError as exc:
++        raise HTTPException(status_code=404, detail=str(exc)) from exc
++    media_type = 'application/json' if report_format == 'json' else 'text/html'
++    return FileResponse(path, media_type=media_type, filename=path.name)
+diff --git a/backend/config.py b/backend/config.py
+index a428814..40f9d8a 100755
+--- a/backend/config.py
++++ b/backend/config.py
+@@ -6,14 +6,16 @@ DATA_DIR = BASE_DIR / 'data'
+ CACHE_DIR = DATA_DIR / 'cache'
+ EXPORT_DIR = DATA_DIR / 'exports'
+ STATE_DIR = DATA_DIR / 'state'
++CONFIG_DIR = BASE_DIR / 'config'
+ 
+-for d in (DATA_DIR, CACHE_DIR, EXPORT_DIR, STATE_DIR):
++for d in (DATA_DIR, CACHE_DIR, EXPORT_DIR, STATE_DIR, CONFIG_DIR):
+     d.mkdir(parents=True, exist_ok=True)
+ 
+ DB_PATH = Path(os.getenv('HPX_DB_PATH', DATA_DIR / 'honeypotx.db'))
+ GEO_CACHE_PATH = Path(os.getenv('HPX_GEO_CACHE_PATH', CACHE_DIR / 'geo_cache.json'))
+ OFFSETS_PATH = Path(os.getenv('HPX_OFFSETS_PATH', STATE_DIR / 'offsets.json'))
+ EVENTS_EXPORT_PATH = Path(os.getenv('HPX_EVENTS_EXPORT_PATH', EXPORT_DIR / 'events_export.json'))
++DASHBOARD_AUTH_PATH = Path(os.getenv('HPX_DASHBOARD_AUTH_PATH', CONFIG_DIR / 'dashboard_auth.json'))
+ 
+ LOG_PATHS = {
+     'cowrie': os.getenv('HPX_COWRIE_LOG', '/home/cyferwall/honeypot/honeypots/logs/cowrie/cowrie.json'),
+diff --git a/backend/db.py b/backend/db.py
+index 2c6fd21..8a24f8d 100755
+--- a/backend/db.py
++++ b/backend/db.py
+@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
+ from contextlib import contextmanager
+ from typing import Any, Callable, Dict, Iterable, List, Optional
+ 
+-from .config import DB_PATH
++from .config import DB_PATH, EVENTS_EXPORT_PATH
+ from .utils import sha256_text
+ 
+ SCHEMA = '''
+@@ -62,18 +62,19 @@ CREATE INDEX IF NOT EXISTS idx_raw_events_timestamp ON raw_events(timestamp);
+ CREATE INDEX IF NOT EXISTS idx_raw_events_session ON raw_events(session);
+ '''
+ 
+-def reset_events():
+-	"""Cancella tutti gli eventi dal database e resetta il file JSON"""
+-	with get_conn() as conn:
+-		conn.execute("DELETE FROM events")
+-		conn.commit()
++def reset_events() -> Dict[str, int]:
++    """Cancella incidenti e dettagli raw gia importati, senza toccare i log sorgente."""
++    with get_conn() as conn:
++        events_count = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
++        raw_count = conn.execute('SELECT COUNT(*) FROM raw_events').fetchone()[0]
++        conn.execute('DELETE FROM events')
++        conn.execute('DELETE FROM raw_events')
++        conn.commit()
+ 
+-	data_dir = os.path.dirname(DB_PATH)
+-	json_path = os.path.join(data_dir, "events.json")
+-	with open(json_path, "w") as f:
+-		json.dump([], f)
++    EVENTS_EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
++    EVENTS_EXPORT_PATH.write_text('[]', encoding='utf-8')
+ 
+-	print("[DB] Database e events.json azzerati.")
++    return {'events_deleted': events_count, 'raw_events_deleted': raw_count}
+ 
+ 
+ def init_db() -> None:
+@@ -246,19 +247,81 @@ def reconcile_events(
+     return {'removed': removed, 'updated': updated}
+ 
+ 
++def _risk_band(score: int) -> str:
++    if score >= 80:
++        return 'Critico'
++    if score >= 60:
++        return 'Alto'
++    if score >= 35:
++        return 'Medio'
++    return 'Basso'
++
++
++def _event_risk_score(event: Dict[str, Any], raw_events: Optional[List[Dict[str, Any]]] = None) -> int:
++    attack_type = event.get('attack_type') or 'Unknown'
++    danger = event.get('danger_level') or 'Basso'
++    raw_events = raw_events or []
++
++    score = {
++        'Web Crawl / Recon': 22,
++        'Port Scan': 24,
++        'Credential Attack': 42,
++        'FTP Attack': 50,
++        'Post-Login Activity': 58,
++        'XSS Attack': 60,
++        'IDOR Attempt': 62,
++        'Unauthorized Login': 75,
++        'SQL Injection': 78,
++        'Command Injection': 86,
++        'Malware Upload': 90,
++        'SMB Attack': 82,
++    }.get(attack_type, 35)
++
++    score += {'Alto': 8, 'Medio': 4, 'Basso': 0}.get(danger, 0)
++
++    credential_attempts = len([
++        item for item in raw_events
++        if item.get('username') is not None or item.get('password') is not None
++    ])
++    commands = {str(item.get('command') or '').strip().lower() for item in raw_events if item.get('command')}
++    paths = {str(item.get('path') or item.get('uri') or '').strip() for item in raw_events if item.get('path') or item.get('uri')}
++    sessions = {str(item.get('session') or '').strip() for item in raw_events if item.get('session')}
++
++    if credential_attempts >= 3:
++        score += min(18, credential_attempts * 3)
++    if commands:
++        score += min(16, len(commands) * 4)
++    if commands & {'wget', 'curl', 'chmod', 'bash', 'sh', 'nc', 'netcat'}:
++        score += 12
++    if len(paths) >= 5:
++        score += 8
++    if len(sessions) > 1:
++        score += 6
++
++    return max(0, min(score, 100))
++
++
++def _enrich_event_risk(event: Dict[str, Any], raw_events: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
++    enriched = dict(event)
++    score = _event_risk_score(enriched, raw_events=raw_events)
++    enriched['risk_score'] = score
++    enriched['risk_level'] = _risk_band(score)
++    return enriched
++
++
+ def fetch_events(limit: int = 200) -> List[Dict[str, Any]]:
+     with get_conn() as conn:
+         rows = conn.execute(
+             'SELECT * FROM events ORDER BY datetime(timestamp) DESC, id DESC LIMIT ?',
+             (limit,)
+         ).fetchall()
+-    return [dict(r) for r in rows]
++    return [_enrich_event_risk(dict(r)) for r in rows]
+ 
+ 
+ def fetch_event_by_id(event_id: int) -> Optional[Dict[str, Any]]:
+     with get_conn() as conn:
+         row = conn.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
+-    return dict(row) if row else None
++    return _enrich_event_risk(dict(row)) if row else None
+ 
+ 
+ def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+@@ -366,7 +429,111 @@ def fetch_event_context(event_id: int, limit: int = 80) -> Optional[Dict[str, An
+             'raw_event': raw_event,
+         }))
+ 
+-    return {'event': event, 'raw_events': raw_events}
++    return {'event': _enrich_event_risk(event, raw_events=raw_events), 'raw_events': raw_events}
++
++
++def _unique_values(rows: Iterable[Dict[str, Any]], field: str, limit: int = 12) -> List[str]:
++    values = []
++    seen = set()
++    for row in rows:
++        value = str(row.get(field) or '').strip()
++        if not value or value in seen:
++            continue
++        seen.add(value)
++        values.append(value)
++        if len(values) >= limit:
++            break
++    return values
++
++
++def _incident_reason(event: Dict[str, Any], raw_events: List[Dict[str, Any]]) -> str:
++    attack_type = event.get('attack_type') or 'Unknown'
++    service = str(event.get('service') or '').upper()
++    raw_event = _parse_raw_event(event)
++    eventid = raw_event.get('eventid') or event.get('eventid')
++    session = raw_event.get('session')
++
++    if attack_type == 'Credential Attack':
++        attempts = len([
++            item for item in raw_events
++            if item.get('username') is not None or item.get('password') is not None
++        ])
++        return (
++            f"Segnalato perche lo stesso IP ha inviato credenziali verso {service or 'il servizio'} "
++            f"piu volte nella finestra di correlazione. Tentativi correlati: {attempts or len(raw_events)}."
++        )
++    if attack_type == 'Unauthorized Login':
++        username = raw_event.get('username') or event.get('username')
++        return (
++            f"Segnalato perche Cowrie ha registrato un login riuscito"
++            f"{f' con utente {username}' if username else ''}. In produzione sarebbe accesso non autorizzato riuscito."
++        )
++    if attack_type == 'Post-Login Activity':
++        commands = _unique_values(raw_events, 'command', limit=5)
++        suffix = f" Comandi osservati: {', '.join(commands)}." if commands else ''
++        return (
++            f"Segnalato perche dopo il login sono stati eseguiti comandi nella sessione"
++            f"{f' {session}' if session else ''}.{suffix}"
++        )
++    if attack_type in {'SQL Injection', 'XSS Attack', 'IDOR Attempt', 'Command Injection'}:
++        paths = _unique_values(raw_events, 'path', limit=3) or _unique_values(raw_events, 'uri', limit=3)
++        suffix = f" Endpoint coinvolti: {', '.join(paths)}." if paths else ''
++        return f"Segnalato perche il payload contiene pattern compatibili con {attack_type}.{suffix}"
++    if attack_type == 'FTP Attack':
++        commands = _unique_values(raw_events, 'command', limit=5)
++        suffix = f" Comandi FTP osservati: {', '.join(commands)}." if commands else ''
++        return f"Segnalato perche l'IP ha usato comandi FTP operativi o di trasferimento file.{suffix}"
++    if attack_type == 'Web Crawl / Recon':
++        paths = _unique_values(raw_events, 'path', limit=5) or _unique_values(raw_events, 'uri', limit=5)
++        suffix = f" Path osservati: {', '.join(paths)}." if paths else ''
++        return f"Segnalato perche sono stati richiesti path o user-agent tipici di scansione/ricognizione.{suffix}"
++    if eventid:
++        return f"Segnalato perche l'evento sorgente {eventid} e stato classificato come {attack_type}."
++    return f"Segnalato perche il comportamento osservato e stato classificato come {attack_type}."
++
++
++def fetch_incident_detail(event_id: int, limit: int = 120) -> Optional[Dict[str, Any]]:
++    context = fetch_event_context(event_id, limit=limit)
++    if not context:
++        return None
++
++    event = _enrich_event_risk(context['event'], raw_events=context['raw_events'])
++    raw_events = context['raw_events']
++    timeline = []
++    for item in raw_events:
++        timeline.append({
++            'kind': 'raw',
++            'timestamp': item.get('timestamp'),
++            'service': item.get('service'),
++            'event_type': item.get('eventid') or item.get('event_type') or 'Raw Event',
++            'summary': item.get('summary') or '',
++        })
++    timeline.append({
++        'kind': 'incident',
++        'timestamp': event.get('timestamp'),
++        'service': event.get('service'),
++        'event_type': event.get('attack_type'),
++        'summary': event.get('explanation_it') or event.get('attack_type') or '',
++    })
++    timeline = sorted(
++        timeline,
++        key=lambda item: (item.get('timestamp') or '', 0 if item.get('kind') == 'raw' else 1),
++    )
++
++    return {
++        'event': event,
++        'raw_events': raw_events,
++        'technical_reason': _incident_reason(event, raw_events),
++        'evidence': {
++            'usernames': _top_counts(item.get('username') for item in raw_events),
++            'passwords': _top_counts(item.get('password') for item in raw_events),
++            'commands': _top_counts(item.get('command') for item in raw_events),
++            'paths': _top_counts((item.get('path') or item.get('uri')) for item in raw_events),
++            'user_agents': _top_counts(item.get('user_agent') for item in raw_events),
++            'sessions': _top_counts(item.get('session') for item in raw_events),
++        },
++        'timeline': timeline[-limit:],
++    }
+ 
+ 
+ def _danger_score(level: Optional[str]) -> int:
+@@ -426,6 +593,19 @@ def _storyline_summary(story: Dict[str, Any]) -> str:
+     )
+ 
+ 
++def _top_counts(values: Iterable[Any], limit: int = 10) -> List[Dict[str, Any]]:
++    counts: Dict[str, int] = {}
++    for value in values:
++        text = str(value or '').strip()
++        if not text:
++            continue
++        counts[text] = counts.get(text, 0) + 1
++    return [
++        {'value': value, 'count': count}
++        for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
++    ]
++
++
+ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+     rows = fetch_events(limit=max(limit * 10, limit))
+     stories: Dict[str, Dict[str, Any]] = {}
+@@ -443,6 +623,8 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+             'last_seen': row.get('timestamp'),
+             'event_count': 0,
+             'danger_level': row.get('danger_level') or 'Basso',
++            'risk_score': row.get('risk_score') or 0,
++            'risk_level': row.get('risk_level') or 'Basso',
+             'attack_types': [],
+             'services': [],
+             'events': [],
+@@ -456,6 +638,9 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+             story['services'].append(service)
+         if _danger_score(row.get('danger_level')) > _danger_score(story.get('danger_level')):
+             story['danger_level'] = row.get('danger_level') or story['danger_level']
++        if int(row.get('risk_score') or 0) > int(story.get('risk_score') or 0):
++            story['risk_score'] = int(row.get('risk_score') or 0)
++            story['risk_level'] = row.get('risk_level') or _risk_band(story['risk_score'])
+ 
+         story['event_count'] += 1
+         story['first_seen'] = _min_timestamp(story.get('first_seen'), row.get('timestamp'))
+@@ -466,6 +651,8 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+             'attack_type': attack_type,
+             'service': service,
+             'danger_level': row.get('danger_level') or 'Basso',
++            'risk_score': row.get('risk_score') or 0,
++            'risk_level': row.get('risk_level') or 'Basso',
+             'explanation_it': row.get('explanation_it'),
+             'advice': row.get('advice'),
+         })
+@@ -484,6 +671,7 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+         result,
+         key=lambda story: (
+             _danger_score(story.get('danger_level')),
++            story.get('risk_score') or 0,
+             story.get('last_seen') or '',
+             story.get('event_count') or 0,
+         ),
+@@ -491,6 +679,102 @@ def fetch_storylines(limit: int = 50) -> List[Dict[str, Any]]:
+     )[:limit]
+ 
+ 
++def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
++    with get_conn() as conn:
++        event_rows = conn.execute(
++            '''
++            SELECT * FROM events
++            WHERE ip = ?
++            ORDER BY datetime(timestamp) ASC, id ASC
++            LIMIT ?
++            ''',
++            (ip, limit),
++        ).fetchall()
++        raw_rows = conn.execute(
++            '''
++            SELECT * FROM raw_events
++            WHERE ip = ?
++            ORDER BY datetime(timestamp) ASC, id ASC
++            LIMIT ?
++            ''',
++            (ip, max(limit * 3, limit)),
++        ).fetchall()
++
++    if not event_rows and not raw_rows:
++        return None
++
++    raw_events = [_compact_raw_event(_row_dict(row)) for row in raw_rows]
++    events = [_enrich_event_risk(dict(row), raw_events=raw_events) for row in event_rows]
++    all_timestamps = [
++        item.get('timestamp')
++        for item in [*events, *raw_events]
++        if item.get('timestamp')
++    ]
++
++    services = sorted({str(item.get('service') or 'unknown') for item in [*events, *raw_events]})
++    attack_types = sorted({str(item.get('attack_type') or 'Unknown') for item in events})
++    countries = [event.get('country') for event in events if event.get('country')]
++    cities = [event.get('city') for event in events if event.get('city')]
++    danger_levels = [event.get('danger_level') for event in events]
++    risk_score = min(
++        100,
++        max([int(event.get('risk_score') or 0) for event in events] or [0])
++        + min(18, max(0, len(events) - 1) * 4)
++        + min(12, max(0, len(services) - 1) * 6)
++        + min(10, max(0, len(raw_events) - 5)),
++    )
++
++    timeline = []
++    for event in events:
++        timeline.append({
++            'kind': 'incident',
++            'id': event.get('id'),
++            'timestamp': event.get('timestamp'),
++            'service': event.get('service'),
++            'attack_type': event.get('attack_type'),
++            'danger_level': event.get('danger_level') or 'Basso',
++            'summary': event.get('explanation_it') or event.get('attack_type') or '',
++        })
++    for raw in raw_events:
++        timeline.append({
++            'kind': 'raw',
++            'id': raw.get('id'),
++            'timestamp': raw.get('timestamp'),
++            'service': raw.get('service'),
++            'attack_type': raw.get('eventid') or raw.get('event_type') or 'Raw Event',
++            'danger_level': None,
++            'summary': raw.get('summary') or '',
++        })
++
++    timeline = sorted(
++        timeline,
++        key=lambda item: (item.get('timestamp') or '', 0 if item.get('kind') == 'raw' else 1, item.get('id') or 0),
++    )[:limit]
++
++    return {
++        'ip': ip,
++        'country': countries[-1] if countries else 'Unknown',
++        'city': cities[-1] if cities else 'Unknown',
++        'first_seen': min(all_timestamps) if all_timestamps else None,
++        'last_seen': max(all_timestamps) if all_timestamps else None,
++        'event_count': len(events),
++        'raw_event_count': len(raw_events),
++        'danger_level': max(danger_levels, key=_danger_score) if danger_levels else 'Basso',
++        'risk_score': risk_score,
++        'risk_level': _risk_band(risk_score),
++        'services': services,
++        'attack_types': attack_types,
++        'top_usernames': _top_counts(raw.get('username') for raw in raw_events),
++        'top_passwords': _top_counts(raw.get('password') for raw in raw_events),
++        'top_commands': _top_counts(raw.get('command') for raw in raw_events),
++        'top_paths': _top_counts((raw.get('path') or raw.get('uri')) for raw in raw_events),
++        'top_user_agents': _top_counts((raw.get('user_agent') for raw in raw_events), limit=8),
++        'events': events[-limit:],
++        'raw_events': raw_events[-limit:],
++        'timeline': timeline,
++    }
++
++
+ def fetch_stats() -> Dict[str, Any]:
+     with get_conn() as conn:
+         row = conn.execute('''
+diff --git a/backend/processor.py b/backend/processor.py
+index 58f3730..86872b1 100755
+--- a/backend/processor.py
++++ b/backend/processor.py
+@@ -4,7 +4,7 @@ from typing import Dict, List
+ 
+ from .classifier import classify_attack, classify_signal
+ from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
+-from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events
++from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
+ from .explainer import explain_attack
+ from .geolocation import GeoResolver
+ from .parsers import read_incremental
+@@ -113,6 +113,12 @@ class Processor:
+         self.export_events_json()
+         return inserted_count
+ 
++    def reset_attacks(self) -> Dict[str, int]:
++        self.signal_history.clear()
++        result = reset_events()
++        self.export_events_json()
++        return result
++
+     def export_events_json(self, limit: int = 500) -> None:
+         events = fetch_events(limit=limit)
+         EVENTS_EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+diff --git a/frontend/dashboard_live.html b/frontend/dashboard_live.html
+index f35651d..8b92076 100755
+--- a/frontend/dashboard_live.html
++++ b/frontend/dashboard_live.html
+@@ -35,6 +35,11 @@
+     overflow-x: hidden;
+   }
+ 
++  body.auth-locked header,
++  body.auth-locked main {
++    display: none;
++  }
++
+   /* ── SFONDO GRIGLIA ANIMATA ── */
+   body::before {
+     content: '';
+@@ -126,6 +131,118 @@
+     color: var(--muted);
+   }
+ 
++  .logout-btn {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    padding: 5px 12px;
++    border-radius: 20px;
++    border: 1px solid var(--border);
++    background: transparent;
++    color: var(--muted);
++    cursor: pointer;
++    letter-spacing: 1px;
++  }
++
++  .logout-btn:hover {
++    border-color: var(--accent);
++    color: var(--accent);
++  }
++
++  .login-screen {
++    display: none;
++    position: fixed;
++    inset: 0;
++    z-index: 2000;
++    background: var(--bg);
++    align-items: center;
++    justify-content: center;
++    padding: 24px;
++  }
++
++  body.auth-locked .login-screen {
++    display: flex;
++  }
++
++  .login-panel {
++    width: 100%;
++    max-width: 360px;
++    background: var(--surface);
++    border: 1px solid var(--border);
++    border-radius: 12px;
++    padding: 26px;
++  }
++
++  .login-title {
++    font-family: var(--font-head);
++    font-size: 24px;
++    font-weight: 700;
++    color: #fff;
++    letter-spacing: 1px;
++    margin-bottom: 6px;
++  }
++
++  .login-subtitle {
++    color: var(--muted);
++    font-size: 13px;
++    margin-bottom: 18px;
++  }
++
++  .login-field {
++    display: flex;
++    flex-direction: column;
++    gap: 6px;
++    margin-bottom: 12px;
++  }
++
++  .login-field label {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    color: var(--muted);
++    letter-spacing: 1px;
++    text-transform: uppercase;
++  }
++
++  .login-field input {
++    background: rgba(255,255,255,0.04);
++    border: 1px solid var(--border);
++    border-radius: 6px;
++    color: var(--text);
++    padding: 10px 12px;
++    font-family: var(--font-body);
++    font-size: 14px;
++    outline: none;
++  }
++
++  .login-field input:focus {
++    border-color: var(--accent);
++  }
++
++  .login-submit {
++    width: 100%;
++    margin-top: 8px;
++    border: 1px solid rgba(0,255,136,0.4);
++    background: rgba(0,255,136,0.12);
++    color: var(--accent);
++    border-radius: 6px;
++    padding: 10px 12px;
++    font-family: var(--font-mono);
++    font-size: 11px;
++    letter-spacing: 1px;
++    cursor: pointer;
++  }
++
++  .login-submit:disabled {
++    cursor: not-allowed;
++    opacity: 0.6;
++  }
++
++  .login-error {
++    min-height: 18px;
++    color: var(--danger);
++    font-size: 12px;
++    margin-top: 10px;
++  }
++
+   /* ── LAYOUT PRINCIPALE ── */
+   main {
+     position: relative;
+@@ -386,9 +503,107 @@
+   .events-controls {
+     display: flex;
+     align-items: center;
++    flex-wrap: wrap;
+     gap: 12px;
+   }
+ 
++  .advanced-filters {
++    display: grid;
++    grid-template-columns: 1.2fr repeat(5, minmax(120px, 1fr)) auto;
++    gap: 10px;
++    padding: 14px 16px;
++    border-bottom: 1px solid var(--border);
++    background: rgba(255,255,255,0.018);
++  }
++
++  .filter-field {
++    display: flex;
++    flex-direction: column;
++    gap: 5px;
++    min-width: 0;
++  }
++
++  .filter-field label {
++    font-family: var(--font-mono);
++    font-size: 9px;
++    color: var(--muted);
++    letter-spacing: 1px;
++    text-transform: uppercase;
++  }
++
++  .filter-field input,
++  .filter-field select {
++    width: 100%;
++    min-width: 0;
++    background: rgba(8,12,16,0.65);
++    border: 1px solid var(--border);
++    border-radius: 6px;
++    color: var(--text);
++    padding: 8px 9px;
++    font-family: var(--font-body);
++    font-size: 12px;
++    outline: none;
++  }
++
++  .filter-field input:focus,
++  .filter-field select:focus {
++    border-color: var(--accent);
++  }
++
++  .filter-actions {
++    display: flex;
++    align-items: end;
++  }
++
++  .clear-filters-btn {
++    height: 34px;
++    font-family: var(--font-mono);
++    font-size: 10px;
++    padding: 0 12px;
++    border-radius: 6px;
++    border: 1px solid var(--border);
++    background: transparent;
++    color: var(--muted);
++    cursor: pointer;
++    letter-spacing: 1px;
++    white-space: nowrap;
++  }
++
++  .clear-filters-btn:hover {
++    border-color: var(--accent2);
++    color: var(--accent2);
++  }
++
++  .filter-result-count {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    color: var(--muted);
++    letter-spacing: 1px;
++  }
++
++  .reset-btn {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    padding: 4px 12px;
++    border-radius: 20px;
++    border: 1px solid rgba(255,51,85,0.45);
++    background: rgba(255,51,85,0.08);
++    color: var(--danger);
++    cursor: pointer;
++    letter-spacing: 1px;
++    transition: all 0.2s;
++  }
++
++  .reset-btn:hover:not(:disabled) {
++    background: rgba(255,51,85,0.16);
++    border-color: var(--danger);
++  }
++
++  .reset-btn:disabled {
++    cursor: not-allowed;
++    opacity: 0.5;
++  }
++
+   .filter-btn {
+     font-family: var(--font-mono);
+     font-size: 10px;
+@@ -455,6 +670,25 @@
+   .badge-warn   { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.3); }
+   .badge-safe   { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
+ 
++  .risk-pill {
++    display: inline-flex;
++    align-items: center;
++    gap: 6px;
++    font-family: var(--font-mono);
++    font-size: 11px;
++    font-weight: 700;
++    border-radius: 999px;
++    padding: 5px 9px;
++    border: 1px solid rgba(255,255,255,0.14);
++    background: rgba(255,255,255,0.045);
++    white-space: nowrap;
++  }
++
++  .risk-critical { color: var(--danger); border-color: rgba(255,51,85,0.35); background: rgba(255,51,85,0.12); }
++  .risk-high { color: var(--warn); border-color: rgba(255,170,0,0.35); background: rgba(255,170,0,0.10); }
++  .risk-medium { color: var(--accent2); border-color: rgba(0,170,255,0.35); background: rgba(0,170,255,0.10); }
++  .risk-low { color: var(--safe); border-color: rgba(0,255,136,0.28); background: rgba(0,255,136,0.08); }
++
+   .attack-type {
+     font-weight: 500;
+     color: #fff;
+@@ -466,6 +700,12 @@
+     color: var(--accent2);
+   }
+ 
++  .ip-text:hover,
++  .storyline-ip:hover {
++    color: var(--accent);
++    text-decoration: underline;
++  }
++
+   .country-text { color: var(--muted); font-size: 12px; }
+   .service-text {
+     font-family: var(--font-mono);
+@@ -502,6 +742,10 @@
+     animation: modal-in 0.25s ease;
+   }
+ 
++  .modal.wide {
++    max-width: 980px;
++  }
++
+   @keyframes modal-in {
+     from { opacity: 0; transform: translateY(20px) scale(0.97); }
+     to   { opacity: 1; transform: translateY(0) scale(1); }
+@@ -562,6 +806,30 @@
+ 
+   .meta-chip span { color: var(--text); }
+ 
++  .export-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++    margin: 0 0 16px;
++  }
++
++  .export-btn {
++    background: rgba(0,170,255,0.10);
++    color: var(--accent2);
++    border: 1px solid rgba(0,170,255,0.28);
++    border-radius: 8px;
++    padding: 8px 11px;
++    font-family: var(--font-mono);
++    font-size: 11px;
++    cursor: pointer;
++    transition: all 0.2s;
++  }
++
++  .export-btn:hover {
++    background: rgba(0,170,255,0.18);
++    color: #fff;
++  }
++
+   .ai-section {
+     background: rgba(0,255,136,0.04);
+     border: 1px solid rgba(0,255,136,0.15);
+@@ -681,6 +949,182 @@
+     padding-top: 8px;
+   }
+ 
++  .incident-grid {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 14px;
++    margin-top: 16px;
++  }
++
++  .incident-panel {
++    background: rgba(255,255,255,0.035);
++    border: 1px solid var(--border);
++    border-radius: 10px;
++    padding: 14px;
++    min-width: 0;
++  }
++
++  .incident-panel.full {
++    grid-column: 1 / -1;
++  }
++
++  .incident-label {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    color: var(--accent);
++    letter-spacing: 2px;
++    margin-bottom: 10px;
++  }
++
++  .incident-evidence-list {
++    display: flex;
++    flex-direction: column;
++    gap: 7px;
++  }
++
++  .incident-evidence-row {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 10px;
++    font-family: var(--font-mono);
++    font-size: 11px;
++    color: var(--text);
++    line-height: 1.35;
++    overflow-wrap: anywhere;
++  }
++
++  .incident-evidence-row span:last-child {
++    color: var(--accent2);
++    flex-shrink: 0;
++  }
++
++  .incident-timeline-row {
++    display: grid;
++    grid-template-columns: 145px 95px 1fr;
++    gap: 10px;
++    padding: 8px 0;
++    border-bottom: 1px solid rgba(26,35,50,0.6);
++    font-size: 12px;
++  }
++
++  .incident-timeline-row:last-child {
++    border-bottom: none;
++  }
++
++  .incident-timeline-time,
++  .incident-timeline-kind {
++    font-family: var(--font-mono);
++    color: var(--muted);
++    font-size: 10px;
++  }
++
++  .ip-summary-grid {
++    display: grid;
++    grid-template-columns: repeat(4, minmax(0, 1fr));
++    gap: 10px;
++    margin-bottom: 16px;
++  }
++
++  .ip-summary-card {
++    background: rgba(255,255,255,0.035);
++    border: 1px solid var(--border);
++    border-radius: 8px;
++    padding: 12px;
++    min-width: 0;
++  }
++
++  .ip-summary-label {
++    font-family: var(--font-mono);
++    font-size: 9px;
++    color: var(--muted);
++    letter-spacing: 1px;
++    text-transform: uppercase;
++    margin-bottom: 5px;
++  }
++
++  .ip-summary-value {
++    font-family: var(--font-head);
++    font-size: 22px;
++    color: #fff;
++    line-height: 1.1;
++    overflow-wrap: anywhere;
++  }
++
++  .ip-detail-grid {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 14px;
++  }
++
++  .ip-detail-section {
++    background: rgba(255,255,255,0.025);
++    border: 1px solid var(--border);
++    border-radius: 10px;
++    padding: 14px;
++    min-width: 0;
++  }
++
++  .ip-section-title {
++    font-family: var(--font-mono);
++    font-size: 10px;
++    color: var(--accent);
++    letter-spacing: 2px;
++    margin-bottom: 10px;
++  }
++
++  .ip-list {
++    display: flex;
++    flex-direction: column;
++    gap: 7px;
++  }
++
++  .ip-list-row {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 10px;
++    color: var(--text);
++    font-family: var(--font-mono);
++    font-size: 11px;
++    line-height: 1.35;
++    overflow-wrap: anywhere;
++  }
++
++  .ip-list-count {
++    color: var(--accent2);
++    flex-shrink: 0;
++  }
++
++  .ip-timeline {
++    grid-column: 1 / -1;
++  }
++
++  .ip-timeline-row {
++    display: grid;
++    grid-template-columns: 145px 80px 1fr;
++    gap: 10px;
++    padding: 8px 0;
++    border-bottom: 1px solid rgba(26,35,50,0.6);
++    font-size: 12px;
++  }
++
++  .ip-timeline-row:last-child {
++    border-bottom: none;
++  }
++
++  .ip-timeline-time,
++  .ip-timeline-kind {
++    font-family: var(--font-mono);
++    color: var(--muted);
++    font-size: 10px;
++  }
++
++  .ip-timeline-main {
++    color: var(--text);
++    overflow-wrap: anywhere;
++  }
++
+   .no-explanation {
+     color: var(--muted);
+     font-size: 13px;
+@@ -710,11 +1154,35 @@
+     .middle-row { grid-template-columns: 1fr; }
+     .storyline-list { grid-template-columns: 1fr; }
+     .raw-fields { grid-template-columns: 1fr; }
++    .incident-grid { grid-template-columns: 1fr; }
++    .incident-timeline-row { grid-template-columns: 1fr; }
++    .ip-summary-grid, .ip-detail-grid { grid-template-columns: 1fr; }
++    .ip-timeline-row { grid-template-columns: 1fr; }
++    .advanced-filters { grid-template-columns: 1fr; }
++    .filter-actions { align-items: stretch; }
++    .clear-filters-btn { width: 100%; }
+     main { padding: 16px; }
+   }
+ </style>
+ </head>
+-<body>
++<body class="auth-locked">
++
++<div class="login-screen">
++  <form class="login-panel" id="loginForm">
++    <div class="login-title">HoneypotX</div>
++    <div class="login-subtitle">Accesso dashboard</div>
++    <div class="login-field">
++      <label for="loginUsername">Username</label>
++      <input id="loginUsername" name="username" autocomplete="username" required>
++    </div>
++    <div class="login-field">
++      <label for="loginPassword">Password</label>
++      <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
++    </div>
++    <button class="login-submit" id="loginSubmit" type="submit">ACCEDI</button>
++    <div class="login-error" id="loginError"></div>
++  </form>
++</div>
+ 
+ <!-- HEADER -->
+ <header>
+@@ -728,6 +1196,7 @@
+       MONITORING ACTIVE
+     </div>
+     <div class="timestamp" id="clock">--:--:--</div>
++    <button class="logout-btn" onclick="logout()">LOGOUT</button>
+   </div>
+ </header>
+ 
+@@ -798,6 +1267,43 @@
+         <button class="filter-btn" onclick="filterEvents('Alto', this)">🔴 ALTO</button>
+         <button class="filter-btn" onclick="filterEvents('Medio', this)">🟡 MEDIO</button>
+         <button class="filter-btn" onclick="filterEvents('Basso', this)">🟢 BASSO</button>
++        <span class="filter-result-count" id="filterResultCount">0 / 0</span>
++        <button class="reset-btn" id="resetBtn" onclick="resetAttacks()">RESET ATTACCHI</button>
++      </div>
++    </div>
++    <div class="advanced-filters">
++      <div class="filter-field">
++        <label for="filterSearch">Ricerca</label>
++        <input id="filterSearch" placeholder="IP, attacco, paese, servizio..." oninput="applyCurrentFilter()">
++      </div>
++      <div class="filter-field">
++        <label for="filterService">Protocollo</label>
++        <select id="filterService" onchange="applyCurrentFilter()">
++          <option value="">Tutti</option>
++        </select>
++      </div>
++      <div class="filter-field">
++        <label for="filterAttackType">Tipo attacco</label>
++        <select id="filterAttackType" onchange="applyCurrentFilter()">
++          <option value="">Tutti</option>
++        </select>
++      </div>
++      <div class="filter-field">
++        <label for="filterCountry">Paese</label>
++        <select id="filterCountry" onchange="applyCurrentFilter()">
++          <option value="">Tutti</option>
++        </select>
++      </div>
++      <div class="filter-field">
++        <label for="filterDateFrom">Da</label>
++        <input id="filterDateFrom" type="date" onchange="applyCurrentFilter()">
++      </div>
++      <div class="filter-field">
++        <label for="filterDateTo">A</label>
++        <input id="filterDateTo" type="date" onchange="applyCurrentFilter()">
++      </div>
++      <div class="filter-actions">
++        <button class="clear-filters-btn" onclick="clearAdvancedFilters()">PULISCI</button>
+       </div>
+     </div>
+     <div class="events-table-wrap">
+@@ -806,6 +1312,7 @@
+           <tr>
+             <th>Pericolo</th>
+             <th>Tipo Attacco</th>
++            <th>Risk</th>
+             <th>IP Attaccante</th>
+             <th>Paese</th>
+             <th>Servizio</th>
+@@ -813,7 +1320,7 @@
+           </tr>
+         </thead>
+         <tbody id="eventsBody">
+-          <tr><td colspan="6" class="empty">Caricamento dati...</td></tr>
++          <tr><td colspan="7" class="empty">Caricamento dati...</td></tr>
+         </tbody>
+       </table>
+     </div>
+@@ -837,6 +1344,21 @@
+   </div>
+ </div>
+ 
++<!-- MODAL DETTAGLIO IP -->
++<div class="modal-overlay" id="ipModalOverlay" onclick="closeIpModal(event)">
++  <div class="modal wide" id="ipModal">
++    <div class="modal-header">
++      <div>
++        <div class="modal-attack-type" id="ipModalTitle">—</div>
++      </div>
++      <button class="modal-close" onclick="closeIpModalDirect()">✕</button>
++    </div>
++    <div class="modal-body">
++      <div id="ipModalContent"></div>
++    </div>
++  </div>
++</div>
++
+ <script>
+ function detectApiBase() {
+   if (window.HONEYPOTX_API_BASE) return window.HONEYPOTX_API_BASE;
+@@ -870,6 +1392,8 @@ let attackChart;
+ let markerLayer;
+ let allEvents = [];
+ let refreshTimer;
++let authToken = localStorage.getItem('honeypotx_auth_token') || '';
++let filterOptionsSignature = '';
+ 
+ function formatTimestamp(value) {
+   if (!value) return 'n/d';
+@@ -887,16 +1411,119 @@ function escapeHtml(value) {
+   }[char]));
+ }
+ 
++function riskClass(score) {
++  const value = Number(score) || 0;
++  if (value >= 80) return 'risk-critical';
++  if (value >= 60) return 'risk-high';
++  if (value >= 35) return 'risk-medium';
++  return 'risk-low';
++}
++
++function riskLabel(score) {
++  const value = Number(score) || 0;
++  if (value >= 80) return 'Critico';
++  if (value >= 60) return 'Alto';
++  if (value >= 35) return 'Medio';
++  return 'Basso';
++}
++
++function renderRisk(score) {
++  const value = Math.max(0, Math.min(Number(score) || 0, 100));
++  return `<span class="risk-pill ${riskClass(value)}">${value}/100 · ${riskLabel(value)}</span>`;
++}
++
+ function updateClock() {
+   document.getElementById('clock').textContent = new Date().toLocaleTimeString('it-IT');
+ }
+ 
+ async function fetchJson(path) {
+-  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
++  const res = await fetch(`${API_BASE}${path}`, {
++    cache: 'no-store',
++    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
++  });
++  if (res.status === 401) {
++    logout();
++    throw new Error('Authentication required');
++  }
++  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
++  return res.json();
++}
++
++async function postJson(path) {
++  const res = await fetch(`${API_BASE}${path}`, {
++    method: 'POST',
++    cache: 'no-store',
++    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
++  });
++  if (res.status === 401) {
++    logout();
++    throw new Error('Authentication required');
++  }
+   if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+   return res.json();
+ }
+ 
++function filenameFromDisposition(headerValue, fallback) {
++  const match = String(headerValue || '').match(/filename="?([^"]+)"?/i);
++  return match ? match[1] : fallback;
++}
++
++async function downloadReport(path, fallbackName) {
++  const res = await fetch(`${API_BASE}${path}`, {
++    cache: 'no-store',
++    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
++  });
++  if (res.status === 401) {
++    logout();
++    throw new Error('Authentication required');
++  }
++  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
++
++  const blob = await res.blob();
++  const url = URL.createObjectURL(blob);
++  const link = document.createElement('a');
++  link.href = url;
++  link.download = filenameFromDisposition(res.headers.get('content-disposition'), fallbackName);
++  document.body.appendChild(link);
++  link.click();
++  link.remove();
++  URL.revokeObjectURL(url);
++}
++
++async function login(username, password) {
++  const res = await fetch(`${API_BASE}/auth/login`, {
++    method: 'POST',
++    cache: 'no-store',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ username, password }),
++  });
++  if (!res.ok) throw new Error('Credenziali non valide');
++  const data = await res.json();
++  authToken = data.access_token || '';
++  localStorage.setItem('honeypotx_auth_token', authToken);
++}
++
++function unlockDashboard() {
++  document.body.classList.remove('auth-locked');
++}
++
++function logout() {
++  authToken = '';
++  localStorage.removeItem('honeypotx_auth_token');
++  if (refreshTimer) clearInterval(refreshTimer);
++  document.body.classList.add('auth-locked');
++}
++
++async function verifySession() {
++  if (!authToken) return false;
++  try {
++    await fetchJson('/auth/me');
++    return true;
++  } catch {
++    return false;
++  }
++}
++
+ async function refreshDashboard() {
+   const [statsResult, distributionResult, mapPointsResult, eventsResult, storylinesResult] = await Promise.allSettled([
+     fetchJson('/stats'),
+@@ -907,24 +1534,18 @@ async function refreshDashboard() {
+   ]);
+ 
+   if (statsResult.status === 'fulfilled') {
+-    renderStats(statsResult.value || { total: 0, high: 0, medium: 0, countries: 0 });
+   } else {
+     console.error('Stats refresh failed:', statsResult.reason);
+-    renderStats({ total: 0, high: 0, medium: 0, countries: 0 });
+   }
+ 
+   if (distributionResult.status === 'fulfilled') {
+-    renderChart(Array.isArray(distributionResult.value) ? distributionResult.value : []);
+   } else {
+     console.error('Distribution refresh failed:', distributionResult.reason);
+-    renderChart([]);
+   }
+ 
+   if (mapPointsResult.status === 'fulfilled') {
+-    renderMap(Array.isArray(mapPointsResult.value) ? mapPointsResult.value : []);
+   } else {
+     console.error('Map refresh failed:', mapPointsResult.reason);
+-    renderMap([]);
+   }
+ 
+   if (eventsResult.status === 'fulfilled') {
+@@ -951,7 +1572,56 @@ function renderStats(stats) {
+   document.getElementById('stat-countries').textContent = stats.countries ?? 0;
+ }
+ 
++function filteredStats(events) {
++  const countries = new Set();
++  return events.reduce((acc, ev) => {
++    const danger = ev.danger_level || 'Basso';
++    acc.total += 1;
++    if (danger === 'Alto') acc.high += 1;
++    if (danger === 'Medio') acc.medium += 1;
++    if (ev.country) countries.add(ev.country);
++    acc.countries = countries.size;
++    return acc;
++  }, { total: 0, high: 0, medium: 0, countries: 0 });
++}
++
++function buildDistribution(events) {
++  const counts = new Map();
++  events.forEach(ev => {
++    const key = ev.attack_type || 'Unknown';
++    counts.set(key, (counts.get(key) || 0) + 1);
++  });
++  return Array.from(counts.entries())
++    .map(([attack_type, count]) => ({ attack_type, count }))
++    .sort((a, b) => b.count - a.count || a.attack_type.localeCompare(b.attack_type));
++}
++
++function buildMapPoints(events) {
++  const grouped = new Map();
++  events.forEach(ev => {
++    if (ev.lat == null || ev.lon == null) return;
++    const key = [ev.lat, ev.lon, ev.country || '', ev.city || '', ev.attack_type || 'Unknown'].join('|');
++    const current = grouped.get(key) || {
++      lat: ev.lat,
++      lon: ev.lon,
++      country: ev.country,
++      city: ev.city,
++      attack_type: ev.attack_type || 'Unknown',
++      sample_ip: ev.ip,
++      sample_service: ev.service,
++      danger_level: ev.danger_level || 'Basso',
++      count: 0,
++    };
++    current.count += 1;
++    if ((ev.danger_level || '') === 'Alto') current.danger_level = 'Alto';
++    else if (current.danger_level !== 'Alto' && (ev.danger_level || '') === 'Medio') current.danger_level = 'Medio';
++    grouped.set(key, current);
++  });
++  return Array.from(grouped.values()).sort((a, b) => b.count - a.count);
++}
++
+ function initMap() {
++  if (map) return;
+   map = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
+   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+     attribution: '© OpenStreetMap © CARTO',
+@@ -1057,9 +1727,12 @@ function renderStorylines(storylines) {
+         <div class="storyline-top">
+           <div>
+             <div class="storyline-title">${escapeHtml(story.title || 'Storyline')}</div>
+-            <div class="storyline-ip">${escapeHtml(story.ip || 'n/d')} · ${escapeHtml(story.city || 'Unknown')}, ${escapeHtml(story.country || 'Unknown')}</div>
++            <div class="storyline-ip" onclick="openIpDetail('${escapeHtml(story.ip || '')}', event)">${escapeHtml(story.ip || 'n/d')} · ${escapeHtml(story.city || 'Unknown')}, ${escapeHtml(story.country || 'Unknown')}</div>
++          </div>
++          <div>
++            <span class="badge ${badgeClass}">${escapeHtml(danger)}</span>
++            ${renderRisk(story.risk_score)}
+           </div>
+-          <span class="badge ${badgeClass}">${escapeHtml(danger)}</span>
+         </div>
+         <div class="storyline-summary">${escapeHtml(story.summary || 'Sequenza di incidenti correlati.')}</div>
+         <div class="storyline-meta">
+@@ -1087,7 +1760,7 @@ function renderStorylines(storylines) {
+ function renderTable(events) {
+   const tbody = document.getElementById('eventsBody');
+   if (!events.length) {
+-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nessun evento reale trovato nei log</td></tr>';
++    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nessun evento corrisponde ai filtri</td></tr>';
+     return;
+   }
+ 
+@@ -1099,7 +1772,8 @@ function renderTable(events) {
+     return `<tr onclick="openModal(${ev.id})">
+       <td><span class="badge ${badgeClass}">${dangerIcon} ${danger}</span></td>
+       <td class="attack-type">${ev.attack_type || 'Unknown'}</td>
+-      <td class="ip-text">${ev.ip || 'n/d'}</td>
++      <td>${renderRisk(ev.risk_score)}</td>
++      <td class="ip-text" onclick="openIpDetail('${escapeHtml(ev.ip || '')}', event)">${ev.ip || 'n/d'}</td>
+       <td class="country-text">🌍 ${ev.country || 'Unknown'}</td>
+       <td><span class="service-text">${(ev.service || 'unknown').toUpperCase()}</span></td>
+       <td class="country-text">${ts}</td>
+@@ -1107,10 +1781,191 @@ function renderTable(events) {
+   }).join('');
+ }
+ 
++function renderTopList(items) {
++  if (!Array.isArray(items) || !items.length) {
++    return '<div class="no-explanation">Nessun dato disponibile.</div>';
++  }
++  return `<div class="ip-list">${items.map(item => `
++    <div class="ip-list-row">
++      <span>${escapeHtml(item.value)}</span>
++      <span class="ip-list-count">${item.count}</span>
++    </div>
++  `).join('')}</div>`;
++}
++
++function renderIpTimeline(items) {
++  if (!Array.isArray(items) || !items.length) {
++    return '<div class="no-explanation">Nessuna timeline disponibile.</div>';
++  }
++  return items.slice(-40).map(item => `
++    <div class="ip-timeline-row">
++      <div class="ip-timeline-time">${formatTimestamp(item.timestamp)}</div>
++      <div class="ip-timeline-kind">${escapeHtml(item.kind || 'event')}</div>
++      <div class="ip-timeline-main">
++        <strong>${escapeHtml(item.attack_type || 'Unknown')}</strong>
++        · ${escapeHtml((item.service || 'unknown').toUpperCase())}
++        <br>${escapeHtml(item.summary || '')}
++      </div>
++    </div>
++  `).join('');
++}
++
++async function openIpDetail(ip, event) {
++  if (event) event.stopPropagation();
++  if (!ip) return;
++  try {
++    const detail = await fetchJson(`/ip/${encodeURIComponent(ip)}/detail?limit=200`);
++    const danger = detail.danger_level || 'Basso';
++    const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
++    document.getElementById('ipModalTitle').textContent = `IP ${detail.ip}`;
++    document.getElementById('ipModalContent').innerHTML = `
++      <div class="modal-meta">
++        <div class="meta-chip">📍 <span>${escapeHtml(detail.city || 'Unknown')}, ${escapeHtml(detail.country || 'Unknown')}</span></div>
++        <div class="meta-chip">⚠️ <span class="badge ${badgeClass}">${escapeHtml(danger)}</span></div>
++        <div class="meta-chip">Risk <span>${renderRisk(detail.risk_score)}</span></div>
++        <div class="meta-chip">🔌 <span>${escapeHtml((detail.services || []).map(s => String(s).toUpperCase()).join(', ') || 'n/d')}</span></div>
++        <div class="meta-chip">📅 <span>${formatTimestamp(detail.first_seen)} → ${formatTimestamp(detail.last_seen)}</span></div>
++      </div>
++      <div class="export-actions">
++        <button class="export-btn" onclick="downloadReport('/ip/${encodeURIComponent(detail.ip)}/export?format=html', 'ip-${escapeHtml(detail.ip)}.html')">ESPORTA HTML</button>
++        <button class="export-btn" onclick="downloadReport('/ip/${encodeURIComponent(detail.ip)}/export?format=json', 'ip-${escapeHtml(detail.ip)}.json')">ESPORTA JSON</button>
++      </div>
++
++      <div class="ip-summary-grid">
++        <div class="ip-summary-card">
++          <div class="ip-summary-label">Incidenti</div>
++          <div class="ip-summary-value">${detail.event_count || 0}</div>
++        </div>
++        <div class="ip-summary-card">
++          <div class="ip-summary-label">Raw Event</div>
++          <div class="ip-summary-value">${detail.raw_event_count || 0}</div>
++        </div>
++        <div class="ip-summary-card">
++          <div class="ip-summary-label">Protocolli</div>
++          <div class="ip-summary-value">${(detail.services || []).length}</div>
++        </div>
++        <div class="ip-summary-card">
++          <div class="ip-summary-label">Tipi Attacco</div>
++          <div class="ip-summary-value">${(detail.attack_types || []).length}</div>
++        </div>
++        <div class="ip-summary-card">
++          <div class="ip-summary-label">Risk Score</div>
++          <div class="ip-summary-value">${detail.risk_score || 0}/100</div>
++        </div>
++      </div>
++
++      <div class="ip-detail-grid">
++        <div class="ip-detail-section">
++          <div class="ip-section-title">USERNAME PROVATI</div>
++          ${renderTopList(detail.top_usernames)}
++        </div>
++        <div class="ip-detail-section">
++          <div class="ip-section-title">PASSWORD PROVATE</div>
++          ${renderTopList(detail.top_passwords)}
++        </div>
++        <div class="ip-detail-section">
++          <div class="ip-section-title">COMANDI ESEGUITI</div>
++          ${renderTopList(detail.top_commands)}
++        </div>
++        <div class="ip-detail-section">
++          <div class="ip-section-title">PATH / URI HTTP</div>
++          ${renderTopList(detail.top_paths)}
++        </div>
++        <div class="ip-detail-section ip-timeline">
++          <div class="ip-section-title">TIMELINE COMPLETA</div>
++          ${renderIpTimeline(detail.timeline)}
++        </div>
++        <div class="ip-detail-section ip-timeline">
++          <div class="ip-section-title">USER-AGENT</div>
++          ${renderTopList(detail.top_user_agents)}
++        </div>
++      </div>
++    `;
++    document.getElementById('ipModalOverlay').classList.add('open');
++  } catch (err) {
++    console.error('IP detail load failed:', err);
++  }
++}
++
++function setSelectOptions(id, values) {
++  const select = document.getElementById(id);
++  if (!select) return;
++  const current = select.value;
++  select.innerHTML = '<option value="">Tutti</option>' + values.map(value => (
++    `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`
++  )).join('');
++  if (values.includes(current)) select.value = current;
++}
++
++function updateFilterOptions() {
++  const services = Array.from(new Set(allEvents.map(ev => ev.service).filter(Boolean).map(v => String(v).toUpperCase()))).sort();
++  const attacks = Array.from(new Set(allEvents.map(ev => ev.attack_type).filter(Boolean))).sort();
++  const countries = Array.from(new Set(allEvents.map(ev => ev.country).filter(Boolean))).sort();
++  const signature = JSON.stringify([services, attacks, countries]);
++  if (signature === filterOptionsSignature) return;
++  filterOptionsSignature = signature;
++  setSelectOptions('filterService', services);
++  setSelectOptions('filterAttackType', attacks);
++  setSelectOptions('filterCountry', countries);
++}
++
++function getAdvancedFilters() {
++  return {
++    search: (document.getElementById('filterSearch')?.value || '').trim().toLowerCase(),
++    service: document.getElementById('filterService')?.value || '',
++    attackType: document.getElementById('filterAttackType')?.value || '',
++    country: document.getElementById('filterCountry')?.value || '',
++    dateFrom: document.getElementById('filterDateFrom')?.value || '',
++    dateTo: document.getElementById('filterDateTo')?.value || '',
++  };
++}
++
++function eventMatchesFilters(ev, filters) {
++  const danger = ev.danger_level || 'Basso';
++  if (currentFilter !== 'all' && danger !== currentFilter) return false;
++  if (filters.service && String(ev.service || '').toUpperCase() !== filters.service) return false;
++  if (filters.attackType && (ev.attack_type || '') !== filters.attackType) return false;
++  if (filters.country && (ev.country || '') !== filters.country) return false;
++
++  if (filters.dateFrom || filters.dateTo) {
++    const ts = new Date(ev.timestamp);
++    if (Number.isNaN(ts.getTime())) return false;
++    if (filters.dateFrom) {
++      const from = new Date(`${filters.dateFrom}T00:00:00`);
++      if (ts < from) return false;
++    }
++    if (filters.dateTo) {
++      const to = new Date(`${filters.dateTo}T23:59:59.999`);
++      if (ts > to) return false;
++    }
++  }
++
++  if (filters.search) {
++    const haystack = [
++      ev.ip,
++      ev.attack_type,
++      ev.country,
++      ev.city,
++      ev.service,
++      ev.source,
++      ev.danger_level,
++      ev.explanation_it,
++      ev.advice,
++    ].map(value => String(value || '').toLowerCase()).join(' ');
++    if (!haystack.includes(filters.search)) return false;
++  }
++
++  return true;
++}
++
+ function applyCurrentFilter() {
+-  const filtered = currentFilter === 'all'
+-    ? allEvents
+-    : allEvents.filter(ev => (ev.danger_level || 'Basso') === currentFilter);
++  updateFilterOptions();
++  const filters = getAdvancedFilters();
++  const filtered = allEvents.filter(ev => eventMatchesFilters(ev, filters));
++  document.getElementById('filterResultCount').textContent = `${filtered.length} / ${allEvents.length}`;
++  renderStats(filteredStats(filtered));
++  renderChart(buildDistribution(filtered));
++  renderMap(buildMapPoints(filtered));
+   renderTable(filtered);
+ }
+ 
+@@ -1121,6 +1976,54 @@ function filterEvents(level, btn) {
+   applyCurrentFilter();
+ }
+ 
++function clearAdvancedFilters() {
++  ['filterSearch', 'filterService', 'filterAttackType', 'filterCountry', 'filterDateFrom', 'filterDateTo']
++    .forEach(id => {
++      const el = document.getElementById(id);
++      if (el) el.value = '';
++    });
++  currentFilter = 'all';
++  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
++  document.querySelector('.filter-btn')?.classList.add('active');
++  applyCurrentFilter();
++}
++
++async function resetAttacks() {
++  const firstCheck = window.confirm(
++    'Stai per cancellare tutti gli attacchi e i dettagli tecnici importati dalla dashboard. I log sorgente resteranno su disco. Continuare?'
++  );
++  if (!firstCheck) return;
++
++  const typed = window.prompt('Secondo controllo: scrivi RESET per confermare la cancellazione.');
++  if (typed !== 'RESET') return;
++
++  const btn = document.getElementById('resetBtn');
++  if (btn) {
++    btn.disabled = true;
++    btn.textContent = 'RESET...';
++  }
++
++  try {
++    await postJson('/reset-attacks');
++    closeModalDirect();
++    allEvents = [];
++    renderStats({ total: 0, high: 0, medium: 0, countries: 0 });
++    renderChart([]);
++    renderMap([]);
++    renderStorylines([]);
++    applyCurrentFilter();
++    await refreshDashboard();
++  } catch (err) {
++    console.error('Reset failed:', err);
++    window.alert('Reset non riuscito. Controlla che il backend API sia attivo.');
++  } finally {
++    if (btn) {
++      btn.disabled = false;
++      btn.textContent = 'RESET ATTACCHI';
++    }
++  }
++}
++
+ function rawField(label, value) {
+   if (value === null || value === undefined || value === '') return '';
+   return `<div class="raw-field">${escapeHtml(label)}: <span>${escapeHtml(value)}</span></div>`;
+@@ -1166,12 +2069,84 @@ function renderRawContext(rawEvents) {
+     </div>`;
+ }
+ 
++function renderEvidenceList(items) {
++  if (!Array.isArray(items) || !items.length) {
++    return '<div class="no-explanation">Nessuna evidenza disponibile.</div>';
++  }
++  return `<div class="incident-evidence-list">${items.map(item => `
++    <div class="incident-evidence-row">
++      <span>${escapeHtml(item.value)}</span>
++      <span>${item.count}</span>
++    </div>
++  `).join('')}</div>`;
++}
++
++function renderIncidentTimeline(items) {
++  if (!Array.isArray(items) || !items.length) {
++    return '<div class="no-explanation">Nessuna timeline disponibile.</div>';
++  }
++  return items.map(item => `
++    <div class="incident-timeline-row">
++      <div class="incident-timeline-time">${formatTimestamp(item.timestamp)}</div>
++      <div class="incident-timeline-kind">${escapeHtml(item.kind || 'event')}</div>
++      <div class="ip-timeline-main">
++        <strong>${escapeHtml(item.event_type || 'Unknown')}</strong>
++        · ${escapeHtml((item.service || 'unknown').toUpperCase())}
++        <br>${escapeHtml(item.summary || '')}
++      </div>
++    </div>
++  `).join('');
++}
++
++function renderIncidentDetail(detail) {
++  const evidence = detail.evidence || {};
++  const eventId = Number(detail.event.id) || 0;
++  return `
++    <div class="export-actions">
++      <button class="export-btn" onclick="downloadReport('/incident/${eventId}/export?format=html', 'incident-${eventId}.html')">ESPORTA HTML</button>
++      <button class="export-btn" onclick="downloadReport('/incident/${eventId}/export?format=json', 'incident-${eventId}.json')">ESPORTA JSON</button>
++    </div>
++    <div class="ai-section">
++      <div class="ai-label">SPIEGAZIONE ATTACCO</div>
++      <div class="ai-text">${escapeHtml(detail.event.explanation_it || 'Spiegazione non disponibile.')}</div>
++    </div>
++    <div class="advice-section">
++      <div class="advice-label">COME DIFENDERSI</div>
++      <div class="advice-text">${escapeHtml(detail.event.advice || 'Nessun consiglio disponibile.')}</div>
++    </div>
++    <div class="incident-grid">
++      <div class="incident-panel full">
++        <div class="incident-label">PERCHE E STATO SEGNALATO</div>
++        <div class="ai-text">${escapeHtml(detail.technical_reason || 'Motivazione tecnica non disponibile.')}</div>
++      </div>
++      <div class="incident-panel">
++        <div class="incident-label">CREDENZIALI PROVATE</div>
++        ${renderEvidenceList([...(evidence.usernames || []), ...(evidence.passwords || [])])}
++      </div>
++      <div class="incident-panel">
++        <div class="incident-label">COMANDI</div>
++        ${renderEvidenceList(evidence.commands)}
++      </div>
++      <div class="incident-panel">
++        <div class="incident-label">PATH / URI</div>
++        ${renderEvidenceList(evidence.paths)}
++      </div>
++      <div class="incident-panel">
++        <div class="incident-label">SESSIONI / USER-AGENT</div>
++        ${renderEvidenceList([...(evidence.sessions || []), ...(evidence.user_agents || [])])}
++      </div>
++      <div class="incident-panel full">
++        <div class="incident-label">TIMELINE INCIDENTE</div>
++        ${renderIncidentTimeline(detail.timeline)}
++      </div>
++    </div>
++    ${renderRawContext(detail.raw_events)}`;
++}
++
+ async function openModal(id) {
+   try {
+-    const [ev, context] = await Promise.all([
+-      fetchJson(`/event/${id}`),
+-      fetchJson(`/event/${id}/context?limit=80`).catch(() => ({ raw_events: [] })),
+-    ]);
++    const detail = await fetchJson(`/incident/${id}/detail?limit=120`);
++    const ev = detail.event || {};
+     document.getElementById('modalTitle').textContent = ev.attack_type || 'Unknown';
+     const danger = ev.danger_level || 'Basso';
+     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
+@@ -1182,18 +2157,9 @@ async function openModal(id) {
+       <div class="meta-chip">🔌 <span>${(ev.service || 'unknown').toUpperCase()}</span></div>
+       <div class="meta-chip">📅 <span>${ts}</span></div>
+       <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${danger}</span></div>
++      <div class="meta-chip">Risk: <span>${renderRisk(ev.risk_score)}</span></div>
+     `;
+-
+-    document.getElementById('modalContent').innerHTML = `
+-      <div class="ai-section">
+-        <div class="ai-label">🤖 SPIEGAZIONE ATTACCO</div>
+-        <div class="ai-text">${ev.explanation_it || 'Spiegazione non disponibile.'}</div>
+-      </div>
+-      <div class="advice-section">
+-        <div class="advice-label">💡 COME DIFENDERSI</div>
+-        <div class="advice-text">${ev.advice || 'Nessun consiglio disponibile.'}</div>
+-      </div>
+-      ${renderRawContext(context.raw_events)}`;
++    document.getElementById('modalContent').innerHTML = renderIncidentDetail(detail);
+ 
+     document.getElementById('modalOverlay').classList.add('open');
+   } catch (err) {
+@@ -1207,17 +2173,54 @@ function closeModal(e) {
+ function closeModalDirect() {
+   document.getElementById('modalOverlay').classList.remove('open');
+ }
++function closeIpModal(e) {
++  if (e.target === document.getElementById('ipModalOverlay')) closeIpModalDirect();
++}
++function closeIpModalDirect() {
++  document.getElementById('ipModalOverlay').classList.remove('open');
++}
+ 
+ document.addEventListener('keydown', e => {
+-  if (e.key === 'Escape') closeModalDirect();
++  if (e.key === 'Escape') {
++    closeModalDirect();
++    closeIpModalDirect();
++  }
+ });
+ 
+-document.addEventListener('DOMContentLoaded', async () => {
+-  updateClock();
+-  setInterval(updateClock, 1000);
++document.getElementById('loginForm').addEventListener('submit', async (event) => {
++  event.preventDefault();
++  const submit = document.getElementById('loginSubmit');
++  const error = document.getElementById('loginError');
++  submit.disabled = true;
++  error.textContent = '';
++  try {
++    await login(
++      document.getElementById('loginUsername').value,
++      document.getElementById('loginPassword').value,
++    );
++    unlockDashboard();
++    await startDashboard();
++  } catch (err) {
++    error.textContent = err.message || 'Login non riuscito.';
++  } finally {
++    submit.disabled = false;
++  }
++});
++
++async function startDashboard() {
++  if (refreshTimer) clearInterval(refreshTimer);
+   initMap();
+   await refreshDashboard();
+   refreshTimer = setInterval(refreshDashboard, 3000);
++}
++
++document.addEventListener('DOMContentLoaded', async () => {
++  updateClock();
++  setInterval(updateClock, 1000);
++  if (await verifySession()) {
++    unlockDashboard();
++    await startDashboard();
++  }
+ });
+ </script>
+ 
+diff --git a/tests/test_processor_flow.py b/tests/test_processor_flow.py
+index d8bc82d..8360603 100644
+--- a/tests/test_processor_flow.py
++++ b/tests/test_processor_flow.py
+@@ -37,11 +37,13 @@ class ProcessorFlowTest(unittest.TestCase):
+         import backend.db as db
+         import backend.geolocation as geolocation
+         import backend.processor as processor
++        import backend.reports as reports
+ 
+         self.config = importlib.reload(config)
+         self.db = importlib.reload(db)
+         importlib.reload(geolocation)
+         self.processor_module = importlib.reload(processor)
++        self.reports = importlib.reload(reports)
+ 
+     def tearDown(self):
+         os.environ.clear()
+@@ -140,13 +142,28 @@ class ProcessorFlowTest(unittest.TestCase):
+         self.assertEqual(events[0]["source"], "opencanary")
+         self.assertEqual(events[0]["ip"], "192.0.2.50")
+         self.assertEqual(events[0]["attack_type"], "Credential Attack")
++        self.assertGreaterEqual(events[0]["risk_score"], 35)
+         context = self.db.fetch_event_context(events[0]["id"])
+         self.assertIsNotNone(context)
+         self.assertEqual(len(context["raw_events"]), 3)
++        self.assertGreater(context["event"]["risk_score"], events[0]["risk_score"])
+         self.assertEqual(
+             [item["username"] for item in context["raw_events"]],
+             ["alice", "bob", "charlie"],
+         )
++        ip_detail = self.db.fetch_ip_detail("192.0.2.50")
++        self.assertIsNotNone(ip_detail)
++        self.assertEqual(ip_detail["event_count"], 1)
++        self.assertEqual(ip_detail["raw_event_count"], 3)
++        self.assertGreaterEqual(ip_detail["risk_score"], context["event"]["risk_score"])
++        self.assertEqual(
++            [item["value"] for item in ip_detail["top_usernames"]],
++            ["alice", "bob", "charlie"],
++        )
++        self.assertEqual(ip_detail["top_paths"][0]["value"], "/index.html")
++        ip_report = self.reports.export_ip_report("192.0.2.50", report_format="html")
++        self.assertTrue(ip_report.exists())
++        self.assertIn("Report IP 192.0.2.50", ip_report.read_text(encoding="utf-8"))
+ 
+         self._processor()
+         events_after_reconcile = self.db.fetch_events()
+@@ -202,6 +219,52 @@ class ProcessorFlowTest(unittest.TestCase):
+             [item["command"] for item in context["raw_events"] if item["command"]],
+             ["whoami", "uname -a"],
+         )
++        detail = self.db.fetch_incident_detail(post_login["id"])
++        self.assertIsNotNone(detail)
++        self.assertIn("dopo il login", detail["technical_reason"])
++        self.assertGreaterEqual(detail["event"]["risk_score"], 60)
++        self.assertEqual(
++            [item["value"] for item in detail["evidence"]["commands"]],
++            ["uname -a", "whoami"],
++        )
++        self.assertTrue(any(item["kind"] == "incident" for item in detail["timeline"]))
++
++        html_report = self.reports.export_incident_report(post_login["id"], report_format="html")
++        json_report = self.reports.export_incident_report(post_login["id"], report_format="json")
++        self.assertTrue(html_report.exists())
++        self.assertTrue(json_report.exists())
++        self.assertIn("Report incidente", html_report.read_text(encoding="utf-8"))
++        self.assertEqual(json.loads(json_report.read_text(encoding="utf-8"))["event"]["id"], post_login["id"])
++
++    def test_reset_attacks_clears_incidents_raw_context_and_export(self):
++        processor = self._processor()
++        base = {
++            "src_ip": "192.0.2.60",
++            "timestamp": "2026-04-29T18:00:00Z",
++            "protocol": "ssh",
++            "session": "session-reset",
++        }
++        self._append_json(self.cowrie_log, {
++            **base,
++            "eventid": "cowrie.login.success",
++            "username": "admin",
++            "password": "password",
++        })
++        self._append_json(self.cowrie_log, {
++            **base,
++            "eventid": "cowrie.command.input",
++            "input": "whoami",
++        })
++
++        self.assertEqual(processor.process_once(), 2)
++        self.assertEqual(len(self.db.fetch_events()), 2)
++
++        result = processor.reset_attacks()
++
++        self.assertEqual(result["events_deleted"], 2)
++        self.assertGreaterEqual(result["raw_events_deleted"], 2)
++        self.assertEqual(self.db.fetch_events(), [])
++        self.assertEqual(self.export_path.read_text(encoding="utf-8"), "[]")
+ 
+ 
+ if __name__ == "__main__":

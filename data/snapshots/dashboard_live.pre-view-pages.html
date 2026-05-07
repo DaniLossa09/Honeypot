@@ -286,95 +286,6 @@
     margin: 0 auto;
   }
 
-  .dashboard-view {
-    display: none;
-  }
-
-  .dashboard-view.active {
-    display: block;
-  }
-
-  .page-heading {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
-  }
-
-  .page-title {
-    font-family: var(--font-head);
-    font-size: 26px;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 1px;
-    line-height: 1;
-  }
-
-  .page-subtitle {
-    margin-top: 6px;
-    color: var(--muted);
-    font-size: 13px;
-  }
-
-  .insight-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .insight-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    min-width: 0;
-  }
-
-  .insight-title {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--accent);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-
-  .insight-list {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-  }
-
-  .insight-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12px;
-    line-height: 1.35;
-    color: var(--text);
-    min-width: 0;
-  }
-
-  .insight-row strong {
-    display: block;
-    color: #fff;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-
-  .insight-row span {
-    color: var(--muted);
-    font-family: var(--font-mono);
-    font-size: 10px;
-  }
-
-  .insight-row .risk-pill {
-    flex-shrink: 0;
-  }
-
   /* ── STAT CARDS ── */
   .stats-row {
     display: grid;
@@ -477,8 +388,7 @@
   }
 
   /* ── MAPPA ── */
-  #map,
-  #analysisMap {
+  #map {
     height: 360px;
     background: #0a0e14;
   }
@@ -954,109 +864,6 @@
     color: #fff;
   }
 
-  .settings-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .settings-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px;
-    min-width: 0;
-  }
-
-  .settings-panel.full {
-    grid-column: 1 / -1;
-  }
-
-  .settings-title {
-    font-family: var(--font-head);
-    font-size: 16px;
-    color: #fff;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-  }
-
-  .settings-help {
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.5;
-    margin-bottom: 14px;
-  }
-
-  .settings-fields {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .settings-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-  }
-
-  .settings-field label,
-  .toggle-row label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  .settings-field input {
-    background: rgba(8,12,16,0.65);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 9px 10px;
-    font-family: var(--font-body);
-    font-size: 13px;
-    outline: none;
-  }
-
-  .settings-field input:focus {
-    border-color: var(--accent);
-  }
-
-  .toggle-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    border: 1px solid rgba(26,35,50,0.85);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.025);
-    padding: 10px 12px;
-  }
-
-  .toggle-row input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--accent);
-  }
-
-  .settings-status {
-    min-height: 18px;
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 12px;
-  }
-
-  .settings-status.ok { color: var(--accent); }
-  .settings-status.err { color: var(--danger); }
-
   .ai-section {
     background: rgba(0,255,136,0.04);
     border: 1px solid rgba(0,255,136,0.15);
@@ -1394,11 +1201,6 @@
       justify-content: space-between;
       gap: 10px;
     }
-    .page-heading {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-    .insight-grid { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: repeat(2, 1fr); }
     .middle-row { grid-template-columns: 1fr; }
     .storyline-list { grid-template-columns: 1fr; }
@@ -1408,7 +1210,6 @@
     .ip-summary-grid, .ip-detail-grid { grid-template-columns: 1fr; }
     .ip-timeline-row { grid-template-columns: 1fr; }
     .advanced-filters { grid-template-columns: 1fr; }
-    .settings-grid, .settings-fields, .toggle-grid { grid-template-columns: 1fr; }
     .filter-actions { align-items: stretch; }
     .clear-filters-btn { width: 100%; }
     main { padding: 16px; }
@@ -1441,11 +1242,10 @@
     <div class="logo-text">Honeypot<span>X</span></div>
   </div>
   <nav class="top-nav" aria-label="Sezioni dashboard">
-    <button class="top-nav-btn active" data-section="overview" onclick="showView('overview')">PANORAMICA</button>
-    <button class="top-nav-btn" data-section="analysis" onclick="showView('analysis')">MAPPA / ANALISI</button>
-    <button class="top-nav-btn" data-section="storylines" onclick="showView('storylines')">STORYLINE</button>
-    <button class="top-nav-btn" data-section="attacks" onclick="showView('attacks')">ATTACCHI</button>
-    <button class="top-nav-btn" data-section="settings" onclick="showView('settings')">CONFIGURAZIONE</button>
+    <button class="top-nav-btn active" data-section="overview" onclick="scrollToSection('overview')">PANORAMICA</button>
+    <button class="top-nav-btn" data-section="analysis" onclick="scrollToSection('analysis')">MAPPA / ANALISI</button>
+    <button class="top-nav-btn" data-section="storylines" onclick="scrollToSection('storylines')">STORYLINE</button>
+    <button class="top-nav-btn" data-section="attacks" onclick="scrollToSection('attacks')">ATTACCHI</button>
   </nav>
   <div class="header-right">
     <div class="live-badge">
@@ -1459,68 +1259,64 @@
 
 <main>
 
-  <section class="dashboard-view active" id="view-overview">
-    <div class="page-heading">
-      <div>
-        <div class="page-title">Panoramica Operativa</div>
-        <div class="page-subtitle">Sintesi prioritaria degli incidenti reali e degli IP da guardare subito.</div>
-      </div>
+  <!-- STAT CARDS -->
+  <div class="stats-row section-anchor" id="overview">
+    <div class="stat-card danger">
+      <div class="stat-label">⚡ Attacchi Totali</div>
+      <div class="stat-value danger" id="stat-total">0</div>
+      <div class="stat-sub">eventi rilevati</div>
     </div>
-
-    <div class="stats-row section-anchor" id="overview">
-      <div class="stat-card danger">
-        <div class="stat-label">⚡ Attacchi Totali</div>
-        <div class="stat-value danger" id="stat-total">0</div>
-        <div class="stat-sub">eventi rilevati</div>
-      </div>
-      <div class="stat-card danger">
-        <div class="stat-label">🔴 Pericolo Alto</div>
-        <div class="stat-value danger" id="stat-high">0</div>
-        <div class="stat-sub">richiedono attenzione</div>
-      </div>
-      <div class="stat-card warn">
-        <div class="stat-label">🟡 Pericolo Medio</div>
-        <div class="stat-value warn" id="stat-medium">0</div>
-        <div class="stat-sub">da monitorare</div>
-      </div>
-      <div class="stat-card info">
-        <div class="stat-label">🌍 Paesi Attaccanti</div>
-        <div class="stat-value info" id="stat-countries">0</div>
-        <div class="stat-sub">origini uniche</div>
-      </div>
+    <div class="stat-card danger">
+      <div class="stat-label">🔴 Pericolo Alto</div>
+      <div class="stat-value danger" id="stat-high">0</div>
+      <div class="stat-sub">richiedono attenzione</div>
     </div>
-
-    <div class="middle-row section-anchor" id="analysis">
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
-        </div>
-        <div id="map"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><div class="dot"></div> TIPO ATTACCO</div>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="attackChart"></canvas>
-          <div class="legend" id="chartLegend"></div>
-        </div>
-      </div>
-
+    <div class="stat-card warn">
+      <div class="stat-label">🟡 Pericolo Medio</div>
+      <div class="stat-value warn" id="stat-medium">0</div>
+      <div class="stat-sub">da monitorare</div>
     </div>
+    <div class="stat-card info">
+      <div class="stat-label">🌍 Paesi Attaccanti</div>
+      <div class="stat-value info" id="stat-countries">0</div>
+      <div class="stat-sub">origini uniche</div>
+    </div>
+  </div>
 
-    <div class="card storyline-section section-anchor" id="storylines">
+  <!-- MAPPA + GRAFICO -->
+  <div class="middle-row section-anchor" id="analysis">
+
+    <div class="card">
       <div class="card-header">
-        <div class="card-title"><div class="dot"></div> ATTACK STORYLINE</div>
+        <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
       </div>
-      <div class="storyline-list" id="storylineList">
-        <div class="empty">Caricamento storyline...</div>
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="dot"></div> TIPO ATTACCO</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="attackChart"></canvas>
+        <div class="legend" id="chartLegend"></div>
       </div>
     </div>
 
-    <div class="card events-section section-anchor" id="attacks">
+  </div>
+
+  <!-- ATTACK STORYLINE -->
+  <div class="card storyline-section section-anchor" id="storylines">
+    <div class="card-header">
+      <div class="card-title"><div class="dot"></div> ATTACK STORYLINE</div>
+    </div>
+    <div class="storyline-list" id="storylineList">
+      <div class="empty">Caricamento storyline...</div>
+    </div>
+  </div>
+
+  <!-- TABELLA EVENTI -->
+  <div class="card events-section section-anchor" id="attacks">
     <div class="card-header">
       <div class="card-title"><div class="dot"></div> EVENTI RILEVATI</div>
       <div class="events-controls">
@@ -1586,170 +1382,6 @@
       </table>
     </div>
   </div>
-  </section>
-
-  <section class="dashboard-view" id="view-analysis">
-    <div class="page-heading">
-      <div>
-        <div class="page-title">Mappa e Analisi</div>
-        <div class="page-subtitle">Dettaglio aggregato per protocollo, tipo di attacco e origine.</div>
-      </div>
-    </div>
-    <div class="insight-grid">
-      <div class="insight-panel">
-        <div class="insight-title">Protocollo piu colpito</div>
-        <div class="insight-list" id="detailProtocolInsightList"><div class="empty">Caricamento...</div></div>
-      </div>
-      <div class="insight-panel">
-        <div class="insight-title">Tipi attacco dominanti</div>
-        <div class="insight-list" id="detailAttackInsightList"><div class="empty">Caricamento...</div></div>
-      </div>
-      <div class="insight-panel">
-        <div class="insight-title">Origini principali</div>
-        <div class="insight-list" id="detailCountryInsightList"><div class="empty">Caricamento...</div></div>
-      </div>
-    </div>
-    <div class="card events-section">
-      <div class="card-header">
-        <div class="card-title"><div class="dot"></div> MAPPA ATTACCHI GLOBALE</div>
-      </div>
-      <div id="analysisMap"></div>
-    </div>
-    <div class="card events-section">
-      <div class="card-header">
-        <div class="card-title"><div class="dot"></div> DETTAGLIO DISTRIBUZIONE</div>
-      </div>
-      <div class="events-table-wrap">
-        <table>
-          <thead>
-            <tr><th>Categoria</th><th>Valore</th><th>Eventi</th></tr>
-          </thead>
-          <tbody id="analysisDetailBody">
-            <tr><td colspan="3" class="empty">Caricamento dati...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section class="dashboard-view" id="view-storylines">
-    <div class="page-heading">
-      <div>
-        <div class="page-title">Storyline Attacchi</div>
-        <div class="page-subtitle">Sequenze correlate per IP/sessione per capire cosa e successo, non solo contare eventi.</div>
-      </div>
-    </div>
-    <div class="card storyline-section">
-      <div class="card-header">
-        <div class="card-title"><div class="dot"></div> STORYLINE DETTAGLIATE</div>
-      </div>
-      <div class="storyline-list" id="storylineListDetail">
-        <div class="empty">Caricamento storyline...</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="dashboard-view" id="view-attacks">
-    <div class="page-heading">
-      <div>
-        <div class="page-title">Elenco Attacchi</div>
-        <div class="page-subtitle">Vista completa degli incidenti ordinati per priorita e tempo.</div>
-      </div>
-    </div>
-    <div class="card events-section">
-      <div class="card-header">
-        <div class="card-title"><div class="dot"></div> EVENTI RILEVATI</div>
-      </div>
-      <div class="events-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Pericolo</th>
-              <th>Tipo Attacco</th>
-              <th>Risk</th>
-              <th>IP Attaccante</th>
-              <th>Paese</th>
-              <th>Servizio</th>
-              <th>Timestamp</th>
-            </tr>
-          </thead>
-          <tbody id="eventsBodyDetail">
-            <tr><td colspan="7" class="empty">Caricamento dati...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section class="dashboard-view" id="view-settings">
-    <div class="page-heading">
-      <div>
-        <div class="page-title">Configurazione Attacchi</div>
-        <div class="page-subtitle">Parametri operativi usati dal backend per decidere quando aggregare o segnalare un attacco.</div>
-      </div>
-    </div>
-
-    <div class="settings-grid">
-      <div class="settings-panel full">
-        <div class="settings-title">Soglie e finestre temporali</div>
-        <div class="settings-help">Questi valori influenzano i nuovi eventi analizzati dal processor. Gli eventi gia registrati restano nello storico.</div>
-        <div class="settings-fields">
-          <div class="settings-field">
-            <label for="settingCredentialThreshold">Tentativi credenziali</label>
-            <input id="settingCredentialThreshold" type="number" min="1" max="20" step="1">
-          </div>
-          <div class="settings-field">
-            <label for="settingCredentialWindow">Finestra credenziali (sec)</label>
-            <input id="settingCredentialWindow" type="number" min="60" max="86400" step="60">
-          </div>
-          <div class="settings-field">
-            <label for="settingIncidentBucket">Dedup incidenti (sec)</label>
-            <input id="settingIncidentBucket" type="number" min="60" max="86400" step="60">
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-panel">
-        <div class="settings-title">Sorgenti abilitate</div>
-        <div class="settings-help">Disabilitare una sorgente evita che i nuovi log di quel protocollo generino incidenti.</div>
-        <div class="toggle-grid">
-          <div class="toggle-row"><label for="settingSourceCowrie">SSH/Telnet Cowrie</label><input id="settingSourceCowrie" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingSourceOpencanary">HTTP/HTTPS OpenCanary</label><input id="settingSourceOpencanary" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingSourceFtp">FTP</label><input id="settingSourceFtp" type="checkbox"></div>
-        </div>
-      </div>
-
-      <div class="settings-panel">
-        <div class="settings-title">Correlazione sessioni</div>
-        <div class="settings-help">Mantiene un solo incidente per i comandi post-login nella stessa sessione SSH.</div>
-        <div class="toggle-grid">
-          <div class="toggle-row"><label for="settingPostLoginDedupe">Dedup post-login per sessione</label><input id="settingPostLoginDedupe" type="checkbox"></div>
-        </div>
-      </div>
-
-      <div class="settings-panel full">
-        <div class="settings-title">Categorie dirette abilitate</div>
-        <div class="settings-help">Controlla quali attacchi vengono registrati subito quando il payload e chiaramente malevolo.</div>
-        <div class="toggle-grid">
-          <div class="toggle-row"><label for="settingAttackUnauthorizedLogin">Login riuscito non autorizzato</label><input id="settingAttackUnauthorizedLogin" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackPostLogin">Comandi post-login</label><input id="settingAttackPostLogin" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackSql">SQL Injection</label><input id="settingAttackSql" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackXss">XSS</label><input id="settingAttackXss" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackIdor">IDOR</label><input id="settingAttackIdor" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackCommand">Command Injection</label><input id="settingAttackCommand" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackMalware">Malware Upload</label><input id="settingAttackMalware" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackRecon">Web Recon / Scansioni</label><input id="settingAttackRecon" type="checkbox"></div>
-          <div class="toggle-row"><label for="settingAttackFtpTransfer">FTP transfer operativo</label><input id="settingAttackFtpTransfer" type="checkbox"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="export-actions" style="margin-top:16px;">
-      <button class="export-btn" onclick="saveAttackSettings()">SALVA CONFIGURAZIONE</button>
-      <button class="clear-filters-btn" onclick="loadAttackSettings()">RICARICA</button>
-    </div>
-    <div class="settings-status" id="settingsStatus"></div>
-  </section>
 
 </main>
 
@@ -1813,15 +1445,12 @@ const CHART_COLORS = [
 
 let currentFilter = 'all';
 let map;
-let analysisMap;
 let attackChart;
 let markerLayer;
-let analysisMarkerLayer;
 let allEvents = [];
 let refreshTimer;
 let authToken = localStorage.getItem('honeypotx_auth_token') || '';
 let filterOptionsSignature = '';
-let currentView = 'overview';
 
 function formatTimestamp(value) {
   if (!value) return 'n/d';
@@ -1866,25 +1495,25 @@ function setActiveSection(sectionId) {
   });
 }
 
-function showView(sectionId) {
-  currentView = sectionId;
-  document.querySelectorAll('.dashboard-view').forEach(view => {
-    view.classList.toggle('active', view.id === `view-${sectionId}`);
-  });
+function scrollToSection(sectionId) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   setActiveSection(sectionId);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (sectionId === 'overview' && map) {
-    setTimeout(() => {
-      map.invalidateSize();
-      renderMap(buildMapPoints(allEvents));
-    }, 120);
-  }
-  if (sectionId === 'analysis' && analysisMap) {
-    setTimeout(() => {
-      analysisMap.invalidateSize();
-      renderAnalysisMap(buildMapPoints(allEvents));
-    }, 120);
-  }
+}
+
+function updateActiveSectionFromScroll() {
+  const sections = ['overview', 'analysis', 'storylines', 'attacks']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  let current = sections[0]?.id || 'overview';
+  const threshold = 130;
+  sections.forEach(section => {
+    if (section.getBoundingClientRect().top <= threshold) {
+      current = section.id;
+    }
+  });
+  setActiveSection(current);
 }
 
 function updateClock() {
@@ -1909,24 +1538,6 @@ async function postJson(path) {
     method: 'POST',
     cache: 'no-store',
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-  });
-  if (res.status === 401) {
-    logout();
-    throw new Error('Authentication required');
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
-  return res.json();
-}
-
-async function putJson(path, payload) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PUT',
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify(payload),
   });
   if (res.status === 401) {
     logout();
@@ -1997,92 +1608,6 @@ async function verifySession() {
   }
 }
 
-function setChecked(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.checked = Boolean(value);
-}
-
-function getChecked(id) {
-  return Boolean(document.getElementById(id)?.checked);
-}
-
-function setSettingsStatus(message, kind = '') {
-  const el = document.getElementById('settingsStatus');
-  if (!el) return;
-  el.textContent = message || '';
-  el.className = `settings-status ${kind}`.trim();
-}
-
-function fillAttackSettings(settings) {
-  document.getElementById('settingCredentialThreshold').value = settings.credential_threshold ?? 3;
-  document.getElementById('settingCredentialWindow').value = settings.credential_window_seconds ?? 600;
-  document.getElementById('settingIncidentBucket').value = settings.incident_bucket_seconds ?? 900;
-
-  const sources = settings.enabled_sources || {};
-  setChecked('settingSourceCowrie', sources.cowrie !== false);
-  setChecked('settingSourceOpencanary', sources.opencanary !== false);
-  setChecked('settingSourceFtp', sources.ftp !== false);
-  setChecked('settingPostLoginDedupe', settings.post_login_dedupe_by_session !== false);
-
-  const attacks = settings.enabled_direct_attacks || {};
-  setChecked('settingAttackUnauthorizedLogin', attacks.unauthorized_login !== false);
-  setChecked('settingAttackPostLogin', attacks.post_login_activity !== false);
-  setChecked('settingAttackSql', attacks.sql_injection !== false);
-  setChecked('settingAttackXss', attacks.xss !== false);
-  setChecked('settingAttackIdor', attacks.idor !== false);
-  setChecked('settingAttackCommand', attacks.command_injection !== false);
-  setChecked('settingAttackMalware', attacks.malware_upload !== false);
-  setChecked('settingAttackRecon', attacks.web_recon !== false);
-  setChecked('settingAttackFtpTransfer', attacks.ftp_transfer !== false);
-}
-
-function readAttackSettingsForm() {
-  return {
-    credential_threshold: Number(document.getElementById('settingCredentialThreshold').value || 3),
-    credential_window_seconds: Number(document.getElementById('settingCredentialWindow').value || 600),
-    incident_bucket_seconds: Number(document.getElementById('settingIncidentBucket').value || 900),
-    post_login_dedupe_by_session: getChecked('settingPostLoginDedupe'),
-    enabled_sources: {
-      cowrie: getChecked('settingSourceCowrie'),
-      opencanary: getChecked('settingSourceOpencanary'),
-      ftp: getChecked('settingSourceFtp'),
-    },
-    enabled_direct_attacks: {
-      unauthorized_login: getChecked('settingAttackUnauthorizedLogin'),
-      post_login_activity: getChecked('settingAttackPostLogin'),
-      sql_injection: getChecked('settingAttackSql'),
-      xss: getChecked('settingAttackXss'),
-      idor: getChecked('settingAttackIdor'),
-      command_injection: getChecked('settingAttackCommand'),
-      malware_upload: getChecked('settingAttackMalware'),
-      web_recon: getChecked('settingAttackRecon'),
-      ftp_transfer: getChecked('settingAttackFtpTransfer'),
-    },
-  };
-}
-
-async function loadAttackSettings() {
-  try {
-    const settings = await fetchJson('/settings/attacks');
-    fillAttackSettings(settings);
-    setSettingsStatus('Configurazione caricata.', 'ok');
-  } catch (err) {
-    console.error('Settings load failed:', err);
-    setSettingsStatus('Impossibile caricare la configurazione.', 'err');
-  }
-}
-
-async function saveAttackSettings() {
-  try {
-    const saved = await putJson('/settings/attacks', readAttackSettingsForm());
-    fillAttackSettings(saved);
-    setSettingsStatus('Configurazione salvata. I nuovi log useranno questi parametri.', 'ok');
-  } catch (err) {
-    console.error('Settings save failed:', err);
-    setSettingsStatus('Salvataggio non riuscito.', 'err');
-  }
-}
-
 async function refreshDashboard() {
   const [statsResult, distributionResult, mapPointsResult, eventsResult, storylinesResult] = await Promise.allSettled([
     fetchJson('/stats'),
@@ -2144,125 +1669,6 @@ function filteredStats(events) {
   }, { total: 0, high: 0, medium: 0, countries: 0 });
 }
 
-function countBy(events, field) {
-  const counts = new Map();
-  events.forEach(ev => {
-    const value = ev[field] || 'Unknown';
-    counts.set(value, (counts.get(value) || 0) + 1);
-  });
-  return Array.from(counts.entries())
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || String(a.value).localeCompare(String(b.value)));
-}
-
-function renderInsightRows(id, rows, mode = 'count') {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (!Array.isArray(rows) || !rows.length) {
-    el.innerHTML = '<div class="empty">Nessun dato disponibile</div>';
-    return;
-  }
-  el.innerHTML = rows.map(row => {
-    if (mode === 'risk') {
-      return `
-        <div class="insight-row">
-          <div>
-            <strong>${escapeHtml(row.title)}</strong>
-            <span>${escapeHtml(row.subtitle || '')}</span>
-          </div>
-          ${renderRisk(row.risk_score)}
-        </div>`;
-    }
-    return `
-      <div class="insight-row">
-        <div>
-          <strong>${escapeHtml(row.value)}</strong>
-          <span>${escapeHtml(row.subtitle || '')}</span>
-        </div>
-        <span>${row.count}</span>
-      </div>`;
-  }).join('');
-}
-
-function renderOverviewInsights(events) {
-  const byRisk = [...events]
-    .sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0) || String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
-    .slice(0, 5)
-    .map(ev => ({
-      title: ev.attack_type || 'Unknown',
-      subtitle: `${ev.ip || 'n/d'} · ${(ev.service || 'unknown').toUpperCase()} · ${formatTimestamp(ev.timestamp)}`,
-      risk_score: ev.risk_score || 0,
-    }));
-  renderInsightRows('topRiskList', byRisk, 'risk');
-
-  const groupedIp = new Map();
-  events.forEach(ev => {
-    const ip = ev.ip || 'n/d';
-    const current = groupedIp.get(ip) || { value: ip, count: 0, maxRisk: 0, services: new Set() };
-    current.count += 1;
-    current.maxRisk = Math.max(current.maxRisk, Number(ev.risk_score) || 0);
-    if (ev.service) current.services.add(String(ev.service).toUpperCase());
-    groupedIp.set(ip, current);
-  });
-  renderInsightRows(
-    'topIpList',
-    Array.from(groupedIp.values())
-      .sort((a, b) => b.maxRisk - a.maxRisk || b.count - a.count)
-      .slice(0, 5)
-      .map(item => ({
-        value: item.value,
-        count: item.count,
-        subtitle: `risk max ${item.maxRisk}/100 · ${Array.from(item.services).join(', ') || 'UNKNOWN'}`,
-      })),
-  );
-
-  const important = [...events]
-    .filter(ev => (ev.danger_level || '') === 'Alto' || (Number(ev.risk_score) || 0) >= 60)
-    .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
-    .slice(0, 5)
-    .map(ev => ({
-      title: ev.attack_type || 'Unknown',
-      subtitle: `${ev.ip || 'n/d'} · ${formatTimestamp(ev.timestamp)}`,
-      risk_score: ev.risk_score || 0,
-    }));
-  renderInsightRows('recentImportantList', important, 'risk');
-}
-
-function renderAnalysisInsights(events) {
-  const protocols = countBy(events, 'service').slice(0, 5).map(item => ({
-    ...item,
-    value: String(item.value || 'unknown').toUpperCase(),
-    subtitle: 'incidenti correlati',
-  }));
-  const attacks = countBy(events, 'attack_type').slice(0, 5).map(item => ({ ...item, subtitle: 'eventi classificati' }));
-  const countries = countBy(events, 'country').slice(0, 5).map(item => ({ ...item, subtitle: 'origine rilevata' }));
-
-  renderInsightRows('protocolInsightList', protocols);
-  renderInsightRows('detailProtocolInsightList', protocols);
-  renderInsightRows('attackInsightList', attacks);
-  renderInsightRows('detailAttackInsightList', attacks);
-  renderInsightRows('countryInsightList', countries);
-  renderInsightRows('detailCountryInsightList', countries);
-
-  const detailBody = document.getElementById('analysisDetailBody');
-  if (detailBody) {
-    const rows = [
-      ...protocols.map(item => ({ category: 'Protocollo', ...item })),
-      ...attacks.map(item => ({ category: 'Tipo attacco', ...item })),
-      ...countries.map(item => ({ category: 'Paese', ...item })),
-    ];
-    detailBody.innerHTML = rows.length
-      ? rows.map(item => `
-        <tr>
-          <td class="country-text">${escapeHtml(item.category)}</td>
-          <td class="attack-type">${escapeHtml(item.value)}</td>
-          <td>${item.count}</td>
-        </tr>
-      `).join('')
-      : '<tr><td colspan="3" class="empty">Nessun dato disponibile</td></tr>';
-  }
-}
-
 function buildDistribution(events) {
   const counts = new Map();
   events.forEach(ev => {
@@ -2308,19 +1714,9 @@ function initMap() {
   markerLayer = L.layerGroup().addTo(map);
 }
 
-function initAnalysisMap() {
-  if (analysisMap) return;
-  analysisMap = L.map('analysisMap', { zoomControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    maxZoom: 18
-  }).addTo(analysisMap);
-  analysisMarkerLayer = L.layerGroup().addTo(analysisMap);
-}
-
-function renderMapInto(targetMap, targetLayer, points) {
-  if (!targetMap || !targetLayer) return;
-  targetLayer.clearLayers();
+function renderMap(points) {
+  if (!map || !markerLayer) return;
+  markerLayer.clearLayers();
 
   const bounds = [];
   points.forEach((point) => {
@@ -2342,23 +1738,15 @@ function renderMapInto(targetMap, targetLayer, points) {
         <div style="margin-top:6px; color:${color};">● ${danger.toUpperCase()}</div>
       </div>
     `, { className: 'dark-popup' });
-    targetLayer.addLayer(marker);
+    markerLayer.addLayer(marker);
     bounds.push([point.lat, point.lon]);
   });
 
   if (bounds.length) {
-    targetMap.fitBounds(bounds, { padding: [30, 30] });
+    map.fitBounds(bounds, { padding: [30, 30] });
   } else {
-    targetMap.setView([20, 0], 2);
+    map.setView([20, 0], 2);
   }
-}
-
-function renderMap(points) {
-  renderMapInto(map, markerLayer, points);
-}
-
-function renderAnalysisMap(points) {
-  renderMapInto(analysisMap, analysisMarkerLayer, points);
 }
 
 function renderChart(distribution) {
@@ -2406,15 +1794,12 @@ function renderChart(distribution) {
 
 function renderStorylines(storylines) {
   const list = document.getElementById('storylineList');
-  const detailList = document.getElementById('storylineListDetail');
   if (!storylines.length) {
-    const empty = '<div class="empty">Nessuna storyline disponibile</div>';
-    if (list) list.innerHTML = empty;
-    if (detailList) detailList.innerHTML = empty;
+    list.innerHTML = '<div class="empty">Nessuna storyline disponibile</div>';
     return;
   }
 
-  const html = storylines.map(story => {
+  list.innerHTML = storylines.map(story => {
     const danger = story.danger_level || 'Basso';
     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
     const services = Array.isArray(story.services) ? story.services.map(s => String(s || 'unknown').toUpperCase()).join(', ') : 'UNKNOWN';
@@ -2454,20 +1839,16 @@ function renderStorylines(storylines) {
       </div>
     `;
   }).join('');
-  if (list) list.innerHTML = html;
-  if (detailList) detailList.innerHTML = html;
 }
 
 function renderTable(events) {
-  const bodies = [document.getElementById('eventsBody'), document.getElementById('eventsBodyDetail')].filter(Boolean);
+  const tbody = document.getElementById('eventsBody');
   if (!events.length) {
-    bodies.forEach(tbody => {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">Nessun evento corrisponde ai filtri</td></tr>';
-    });
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nessun evento corrisponde ai filtri</td></tr>';
     return;
   }
 
-  const html = events.map(ev => {
+  tbody.innerHTML = events.map(ev => {
     const danger = ev.danger_level || 'Basso';
     const ts = formatTimestamp(ev.timestamp);
     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
@@ -2482,9 +1863,6 @@ function renderTable(events) {
       <td class="country-text">${ts}</td>
     </tr>`;
   }).join('');
-  bodies.forEach(tbody => {
-    tbody.innerHTML = html;
-  });
 }
 
 function renderTopList(items) {
@@ -2670,11 +2048,8 @@ function applyCurrentFilter() {
   const filtered = allEvents.filter(ev => eventMatchesFilters(ev, filters));
   document.getElementById('filterResultCount').textContent = `${filtered.length} / ${allEvents.length}`;
   renderStats(filteredStats(filtered));
-  renderOverviewInsights(filtered);
-  renderAnalysisInsights(filtered);
   renderChart(buildDistribution(filtered));
   renderMap(buildMapPoints(filtered));
-  renderAnalysisMap(buildMapPoints(filtered));
   renderTable(filtered);
 }
 
@@ -2896,6 +2271,8 @@ document.addEventListener('keydown', e => {
   }
 });
 
+window.addEventListener('scroll', updateActiveSectionFromScroll, { passive: true });
+
 document.getElementById('loginForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const submit = document.getElementById('loginSubmit');
@@ -2918,10 +2295,7 @@ document.getElementById('loginForm').addEventListener('submit', async (event) =>
 
 async function startDashboard() {
   if (refreshTimer) clearInterval(refreshTimer);
-  showView(currentView);
   initMap();
-  initAnalysisMap();
-  await loadAttackSettings();
   await refreshDashboard();
   refreshTimer = setInterval(refreshDashboard, 3000);
 }
@@ -2929,7 +2303,7 @@ async function startDashboard() {
 document.addEventListener('DOMContentLoaded', async () => {
   updateClock();
   setInterval(updateClock, 1000);
-  showView('overview');
+  updateActiveSectionFromScroll();
   if (await verifySession()) {
     unlockDashboard();
     await startDashboard();

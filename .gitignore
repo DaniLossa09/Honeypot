@@ -1,6 +1,8 @@
 .venv/
 __pycache__/
 *.py[cod]
+config/dashboard_auth.json
+config/attack_settings.json
 
 # Runtime database, state, exports and generated logs.
 data/*.db
