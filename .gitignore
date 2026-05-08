@@ -1,4 +1,5 @@
 .venv/
+.env
 __pycache__/
 *.py[cod]
 config/dashboard_auth.json
@@ -22,3 +23,6 @@ honeypots/logs/ftp/*
 !honeypots/logs/opencanary/
 honeypots/logs/opencanary/*
 !honeypots/logs/opencanary/.gitkeep
+honeypots/fake_corp/*
+!honeypots/fake_corp/.gitkeep
+honeypots/cowrie/userdb.txt.backup.*

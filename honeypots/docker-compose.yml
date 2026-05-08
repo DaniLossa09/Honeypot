@@ -45,5 +45,6 @@ services:
       - "20:20"
     volumes:
       - ./logs/ftp:/opt/dionaea/var/log/dionaea
+      - ./fake_corp/ftp_root:/opt/dionaea/fake_corp/ftp_root:ro
     networks:
       - honeypot-net

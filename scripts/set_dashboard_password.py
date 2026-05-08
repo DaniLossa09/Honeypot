@@ -9,9 +9,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from backend.auth import hash_password  # noqa: E402
-
-
-AUTH_PATH = ROOT_DIR / 'config' / 'dashboard_auth.json'
+from backend.config import DASHBOARD_AUTH_PATH  # noqa: E402
 
 
 def main() -> int:
@@ -29,15 +27,15 @@ def main() -> int:
         print('Usa almeno 8 caratteri.', file=sys.stderr)
         return 1
 
-    AUTH_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DASHBOARD_AUTH_PATH.parent.mkdir(parents=True, exist_ok=True)
     config = {
         'username': username,
         'password_hash': hash_password(password),
         'token_secret': secrets.token_urlsafe(48),
         'token_ttl_seconds': 28800,
     }
-    AUTH_PATH.write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
-    print(f'Credenziali dashboard aggiornate: {AUTH_PATH}')
+    DASHBOARD_AUTH_PATH.write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
+    print(f'Credenziali dashboard aggiornate: {DASHBOARD_AUTH_PATH}')
     return 0
 
 

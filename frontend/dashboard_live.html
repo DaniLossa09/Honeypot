@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HoneypotX — Cyber Threat Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -20,9 +20,9 @@
     --safe:     #00ff88;
     --text:     #c9d1d9;
     --muted:    #4a5568;
-    --font-mono: 'Share Tech Mono', monospace;
-    --font-head: 'Rajdhani', sans-serif;
-    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-head: 'IBM Plex Sans', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1817,6 +1817,8 @@ let analysisMap;
 let attackChart;
 let markerLayer;
 let analysisMarkerLayer;
+let mapHasAutoFit = false;
+let analysisMapHasAutoFit = false;
 let allEvents = [];
 let refreshTimer;
 let authToken = localStorage.getItem('honeypotx_auth_token') || '';
@@ -2306,6 +2308,9 @@ function initMap() {
     maxZoom: 18
   }).addTo(map);
   markerLayer = L.layerGroup().addTo(map);
+  map.on('zoomstart movestart', () => {
+    mapHasAutoFit = true;
+  });
 }
 
 function initAnalysisMap() {
@@ -2316,9 +2321,12 @@ function initAnalysisMap() {
     maxZoom: 18
   }).addTo(analysisMap);
   analysisMarkerLayer = L.layerGroup().addTo(analysisMap);
+  analysisMap.on('zoomstart movestart', () => {
+    analysisMapHasAutoFit = true;
+  });
 }
 
-function renderMapInto(targetMap, targetLayer, points) {
+function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
   if (!targetMap || !targetLayer) return;
   targetLayer.clearLayers();
 
@@ -2333,7 +2341,7 @@ function renderMapInto(targetMap, targetLayer, points) {
       className: '', iconSize: [size, size], iconAnchor: [size/2, size/2],
     });
     const marker = L.marker([point.lat, point.lon], { icon }).bindPopup(`
-      <div style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
         <div style="color:#fff; font-size:14px; margin-bottom:6px;">${point.attack_type}</div>
         <div>🌐 ${point.sample_ip || 'n/d'}</div>
         <div>📍 ${point.city || 'Unknown'}, ${point.country || 'Unknown'}</div>
@@ -2346,19 +2354,23 @@ function renderMapInto(targetMap, targetLayer, points) {
     bounds.push([point.lat, point.lon]);
   });
 
-  if (bounds.length) {
+  if (bounds.length && shouldAutoFit) {
     targetMap.fitBounds(bounds, { padding: [30, 30] });
-  } else {
+  } else if (!bounds.length && shouldAutoFit) {
     targetMap.setView([20, 0], 2);
   }
 }
 
 function renderMap(points) {
-  renderMapInto(map, markerLayer, points);
+  const shouldAutoFit = !mapHasAutoFit;
+  renderMapInto(map, markerLayer, points, shouldAutoFit);
+  if (points.length) mapHasAutoFit = true;
 }
 
 function renderAnalysisMap(points) {
-  renderMapInto(analysisMap, analysisMarkerLayer, points);
+  const shouldAutoFit = !analysisMapHasAutoFit;
+  renderMapInto(analysisMap, analysisMarkerLayer, points, shouldAutoFit);
+  if (points.length) analysisMapHasAutoFit = true;
 }
 
 function renderChart(distribution) {
