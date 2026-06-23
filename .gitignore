@@ -1,5 +1,6 @@
 .venv/
 .env
+CLAUDE.md
 __pycache__/
 *.py[cod]
 config/dashboard_auth.json
