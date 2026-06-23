@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Non eseguire come root: creerebbe DB, report e .env di proprieta di root,
+# rendendoli non scrivibili quando l'app gira come utente normale.
+if [ "$(id -u)" -eq 0 ]; then
+  printf 'Errore: non eseguire install.sh come root (o con sudo).\n' >&2
+  printf 'Lancialo come utente normale, cosi i file restano scrivibili dall app.\n' >&2
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
 

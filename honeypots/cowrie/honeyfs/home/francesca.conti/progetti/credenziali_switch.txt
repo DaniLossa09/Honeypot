@@ -1,0 +1,4 @@
+# Credenziali apparati di rete Vodafone
+core-sw-01  admin / Sw1tchCore2026!
+fw-perimetro root / Firewall2026!
+ricordarsi di ruotare dopo l'audit

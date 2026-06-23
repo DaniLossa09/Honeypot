@@ -1,5 +1,4 @@
 .venv/
-.env.example
 .env
 __pycache__/
 *.py[cod]
@@ -27,3 +26,7 @@ honeypots/logs/opencanary/*
 honeypots/fake_corp/*
 !honeypots/fake_corp/.gitkeep
 honeypots/cowrie/userdb.txt.backup.*
+honeypots/cowrie/cowrie.cfg.backup.*
+honeypots/docker-compose.yml.backup.*
+honeypots/cowrie/honeyfs.backup.*/
+honeypots/cowrie/share/cowrie/fs.pickle.backup.*

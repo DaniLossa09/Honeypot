@@ -44,6 +44,13 @@ LOG_PATHS = {
 
 GEO_API_BASE = os.getenv('HPX_GEO_API_BASE', 'http://ip-api.com/json')
 POLL_INTERVAL_SECONDS = int(os.getenv('HPX_POLL_INTERVAL', '3'))
+# La dashboard e servita in LAN (0.0.0.0:8080) e calcola l'API base come
+# http://<hostname>:8000, quindi il browser dei device remoti deve poter
+# raggiungere l'API: bind su tutte le interfacce. Gli endpoint dati sono
+# protetti da auth Bearer. Per restringere: HPX_API_HOST=127.0.0.1 (solo Pi) o
+# l'IP LAN, idealmente dietro reverse proxy con TLS.
 API_HOST = os.getenv('HPX_API_HOST', '0.0.0.0')
 API_PORT = int(os.getenv('HPX_API_PORT', '8000'))
+# Origini CORS consentite. '*' = wildcard (le credenziali vengono disattivate,
+# sicuro con auth a token nell'header). Altrimenti lista CSV di origini esplicite.
 FRONTEND_ORIGIN = os.getenv('HPX_FRONTEND_ORIGIN', '*')

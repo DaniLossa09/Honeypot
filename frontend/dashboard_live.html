@@ -2485,12 +2485,12 @@ function renderTable(events) {
     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
     const dangerIcon = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
     return `<tr onclick="openModal(${ev.id})">
-      <td><span class="badge ${badgeClass}">${dangerIcon} ${danger}</span></td>
-      <td class="attack-type">${ev.attack_type || 'Unknown'}</td>
+      <td><span class="badge ${badgeClass}">${dangerIcon} ${escapeHtml(danger)}</span></td>
+      <td class="attack-type">${escapeHtml(ev.attack_type || 'Unknown')}</td>
       <td>${renderRisk(ev.risk_score)}</td>
-      <td class="ip-text" onclick="openIpDetail('${escapeHtml(ev.ip || '')}', event)">${ev.ip || 'n/d'}</td>
-      <td class="country-text">🌍 ${ev.country || 'Unknown'}</td>
-      <td><span class="service-text">${(ev.service || 'unknown').toUpperCase()}</span></td>
+      <td class="ip-text" onclick="openIpDetail('${escapeHtml(ev.ip || '')}', event)">${escapeHtml(ev.ip || 'n/d')}</td>
+      <td class="country-text">🌍 ${escapeHtml(ev.country || 'Unknown')}</td>
+      <td><span class="service-text">${escapeHtml((ev.service || 'unknown').toUpperCase())}</span></td>
       <td class="country-text">${ts}</td>
     </tr>`;
   }).join('');
@@ -2873,11 +2873,11 @@ async function openModal(id) {
     const badgeClass = danger === 'Alto' ? 'badge-danger' : danger === 'Medio' ? 'badge-warn' : 'badge-safe';
     const ts = formatTimestamp(ev.timestamp);
     document.getElementById('modalMeta').innerHTML = `
-      <div class="meta-chip">🌐 IP: <span>${ev.ip || 'n/d'}</span></div>
-      <div class="meta-chip">📍 <span>${ev.city || 'Unknown'}, ${ev.country || 'Unknown'}</span></div>
-      <div class="meta-chip">🔌 <span>${(ev.service || 'unknown').toUpperCase()}</span></div>
+      <div class="meta-chip">🌐 IP: <span>${escapeHtml(ev.ip || 'n/d')}</span></div>
+      <div class="meta-chip">📍 <span>${escapeHtml(ev.city || 'Unknown')}, ${escapeHtml(ev.country || 'Unknown')}</span></div>
+      <div class="meta-chip">🔌 <span>${escapeHtml((ev.service || 'unknown').toUpperCase())}</span></div>
       <div class="meta-chip">📅 <span>${ts}</span></div>
-      <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${danger}</span></div>
+      <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${escapeHtml(danger)}</span></div>
       <div class="meta-chip">Risk: <span>${renderRisk(ev.risk_score)}</span></div>
     `;
     document.getElementById('modalContent').innerHTML = renderIncidentDetail(detail);

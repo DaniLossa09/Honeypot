@@ -1,0 +1,2 @@
+TODO: ruotare le password dopo la migrazione.
+Il pannello admin legacy e' ancora su http://10.0.0.5/admin

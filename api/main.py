@@ -37,7 +37,9 @@ def require_auth(authorization: str = Header(default='')) -> Dict[str, Any]:
 async def background_processor():
     while True:
         try:
-            processor.process_once()
+            # process_once e sincrono e bloccante (file I/O, SQLite, HTTP geo):
+            # eseguilo in un thread per non bloccare l'event loop / le risposte HTTP.
+            await asyncio.to_thread(processor.process_once)
         except Exception as exc:
             print(f'[processor] cycle failed: {exc}')
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
@@ -45,7 +47,7 @@ async def background_processor():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    processor.process_once()
+    await asyncio.to_thread(processor.process_once)
     task = asyncio.create_task(background_processor())
     try:
         yield
@@ -56,10 +58,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title='HoneypotX API', version='2.0.0', lifespan=lifespan)
+
+# Wildcard + credenziali e una misconfigurazione (e vietato dalla spec CORS).
+# L'auth qui usa il token Bearer nell'header (mai cookie), quindi con il
+# wildcard disattiviamo le credenziali; con origini esplicite le abilitiamo.
+_cors_origins = [origin.strip() for origin in FRONTEND_ORIGIN.split(',') if origin.strip()]
+_cors_wildcard = '*' in _cors_origins or not _cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'] if FRONTEND_ORIGIN == '*' else [FRONTEND_ORIGIN],
-    allow_credentials=True,
+    allow_origins=['*'] if _cors_wildcard else _cors_origins,
+    allow_credentials=not _cors_wildcard,
     allow_methods=['*'],
     allow_headers=['*'],
 )

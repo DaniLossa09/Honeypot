@@ -20,6 +20,8 @@ services:
     volumes:
       - ./cowrie/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
       - ./cowrie/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+      - ./cowrie/honeyfs:/cowrie/cowrie-git/honeyfs:ro
+      - ./cowrie/share/cowrie/fs.pickle:/cowrie/cowrie-git/share/cowrie/fs.pickle:ro
       - ./logs/cowrie:/cowrie/cowrie-git/var/log/cowrie
     networks:
       - honeypot-net

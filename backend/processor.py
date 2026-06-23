@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List
 
 from .classifier import classify_attack, classify_signal
@@ -156,8 +157,21 @@ class Processor:
     def reset_attacks(self) -> Dict[str, int]:
         self.signal_history.clear()
         result = reset_events()
+        # Avanza gli offset a fine file: "reset" = pulisci la vista e ignora tutto
+        # cio che e gia nei log, cosi gli incidenti cancellati NON ricompaiono al
+        # ciclo successivo. Solo le righe di log nuove generano nuovi incidenti.
+        # (Per riprocessare i log da zero: azzerare data/state/offsets.json.)
+        self.offsets = {name: self._log_size(path) for name, path in LOG_PATHS.items()}
+        self._save_offsets()
         self.export_events_json()
         return result
+
+    @staticmethod
+    def _log_size(path_str: str) -> int:
+        try:
+            return Path(path_str).stat().st_size
+        except OSError:
+            return 0
 
     def export_events_json(self, limit: int = 500) -> None:
         events = fetch_events(limit=limit)

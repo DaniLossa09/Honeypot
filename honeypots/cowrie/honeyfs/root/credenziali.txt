@@ -1,0 +1,4 @@
+# Credenziali amministrative Vodafone (NON committare)
+root@db-prod-01: Db2026!
+nas-01 (svc-backup): Backup2026!
+vpn gateway: deploy / Deploy2026!

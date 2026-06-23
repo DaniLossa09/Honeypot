@@ -2,7 +2,7 @@ import socket
 import threading
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 LOG_PATH = "/opt/dionaea/var/log/dionaea/ftp.json"
@@ -23,7 +23,7 @@ RESPONSES = {
 
 def log(ip, port, command, argument=""):
     entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "src_ip": ip,
         "src_port": port,
         "command": command,
@@ -40,7 +40,9 @@ def resolve_fake_path(cwd, argument=""):
     else:
         relative = f"{cwd.strip('/')}/{requested}".strip("/")
     target = (FAKE_ROOT / relative).resolve()
-    if not str(target).startswith(str(FAKE_ROOT)):
+    # Containment robusto: is_relative_to evita il bypass via directory "fratello"
+    # (es. /ftp_root_evil) consentito dal vecchio str().startswith().
+    if target != FAKE_ROOT and not target.is_relative_to(FAKE_ROOT):
         return None
     return target
 
