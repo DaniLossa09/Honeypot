@@ -8,6 +8,7 @@ from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
 from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
 from .explainer import explain_attack
 from .geolocation import GeoResolver
+from .mitre import map_attack_to_mitre
 from .parsers import read_incremental
 from .settings import load_attack_settings
 from .utils import sha256_text
@@ -146,6 +147,7 @@ class Processor:
                     continue
                 record['attack_type'] = attack_type
                 record.update(explain_attack(record['attack_type']))
+                record.update(map_attack_to_mitre(attack_type, record))
                 record.update(self.geo.resolve(record.get('ip')))
                 record['event_hash'] = self._event_hash(record)
                 if insert_event(record):

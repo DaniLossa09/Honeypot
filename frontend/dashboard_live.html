@@ -794,6 +794,33 @@
   .badge-warn   { background: rgba(255,170,0,0.15);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.3); }
   .badge-safe   { background: rgba(0,255,136,0.1);   color: var(--safe);   border: 1px solid rgba(0,255,136,0.3); }
 
+  .mitre-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    cursor: help;
+    background: rgba(120,160,255,0.12);
+    color: #9db8ff;
+    border: 1px solid rgba(120,160,255,0.28);
+  }
+  .mitre-badge.conf-medio { background: rgba(255,170,0,0.1); color: #f0c060; border-color: rgba(255,170,0,0.25); }
+  .mitre-badge.conf-basso { background: rgba(160,160,170,0.1); color: #aab0c0; border-color: rgba(160,160,170,0.25); }
+  .mitre-badge .mitre-uncertain { font-style: italic; opacity: 0.85; }
+
+  .discovery-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .discovery-list .mitre-badge { margin-top: 0; font-size: 10px; padding: 4px 9px; }
+
   .risk-pill {
     display: inline-flex;
     align-items: center;
@@ -1550,6 +1577,12 @@
         </select>
       </div>
       <div class="filter-field">
+        <label for="filterMitre">Tecnica MITRE</label>
+        <select id="filterMitre" onchange="applyCurrentFilter()">
+          <option value="">Tutte</option>
+        </select>
+      </div>
+      <div class="filter-field">
         <label for="filterCountry">Paese</label>
         <select id="filterCountry" onchange="applyCurrentFilter()">
           <option value="">Tutti</option>
@@ -1860,6 +1893,58 @@ function riskLabel(score) {
 function renderRisk(score) {
   const value = Math.max(0, Math.min(Number(score) || 0, 100));
   return `<span class="risk-pill ${riskClass(value)}">${value}/100 · ${riskLabel(value)}</span>`;
+}
+
+// ID MITRE mostrato in tabella (sub-technique se presente, altrimenti technique).
+function mitreLabel(ev) {
+  return ev.mitre_subtechnique || ev.mitre_technique || '';
+}
+
+// Badge MITRE compatto con tooltip (nome ufficiale + tattica + confidenza).
+function renderMitreBadge(ev) {
+  const id = mitreLabel(ev);
+  if (!id) return '';
+  const conf = ev.mitre_confidence || '';
+  const confClass = conf === 'Medio' ? 'conf-medio' : conf === 'Basso' ? 'conf-basso' : '';
+  const name = ev.mitre_subtechnique_name || ev.mitre_technique_name || '';
+  const tactic = ev.mitre_tactic_name ? `${ev.mitre_tactic_name} · ` : '';
+  const tip = `${tactic}${id}${name ? ' – ' + name : ''}${conf ? ' (confidenza ' + conf + ')' : ''}`;
+  const uncertain = ev.mitre_uncertain ? '<span class="mitre-uncertain">≈ incerto</span>' : '';
+  return `<span class="mitre-badge ${confClass}" title="${escapeHtml(tip)}">🎯 ${escapeHtml(id)} ${uncertain}</span>`;
+}
+
+// Badge delle technique di Discovery (TA0007) rilevate dai comandi della sessione.
+function renderDiscoveryBadges(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return '<div class="no-explanation">Nessuna tecnica di discovery rilevata.</div>';
+  }
+  return `<div class="discovery-list">${items.map(it => {
+    const conf = it.confidence || '';
+    const confClass = conf === 'Medio' ? 'conf-medio' : conf === 'Basso' ? 'conf-basso' : '';
+    const tip = `${it.name || ''}${conf ? ' (confidenza ' + conf + ')' : ''}`;
+    const link = it.url ? `href="${escapeHtml(it.url)}" target="_blank" rel="noopener"` : '';
+    return `<a class="mitre-badge ${confClass}" ${link} title="${escapeHtml(tip)}" style="text-decoration:none;">🔍 ${escapeHtml(it.id)} · ${escapeHtml(it.name || '')} ×${Number(it.count) || 1}</a>`;
+  }).join(' ')}</div>`;
+}
+
+// Riga MITRE ATT&CK nella modale incidente: Tattica / Tecnica / Sub-tecnica + link.
+function renderMitreMeta(ev) {
+  if (!ev.mitre_technique) {
+    return '<div class="meta-chip">🎯 MITRE: <span>non classificato</span></div>';
+  }
+  const parts = [];
+  if (ev.mitre_tactic_name) parts.push(`Tattica: ${escapeHtml(ev.mitre_tactic)} ${escapeHtml(ev.mitre_tactic_name)}`);
+  parts.push(`Tecnica: ${escapeHtml(ev.mitre_technique)} ${escapeHtml(ev.mitre_technique_name || '')}`);
+  if (ev.mitre_subtechnique) {
+    parts.push(`Sub: ${escapeHtml(ev.mitre_subtechnique)} ${escapeHtml(ev.mitre_subtechnique_name || '')}`);
+  }
+  if (ev.mitre_confidence) {
+    parts.push(`Confidenza: ${escapeHtml(ev.mitre_confidence)}${ev.mitre_uncertain ? ' (incerto)' : ''}`);
+  }
+  const link = ev.mitre_url
+    ? ` <a href="${escapeHtml(ev.mitre_url)}" target="_blank" rel="noopener" style="color:#9db8ff;">↗</a>`
+    : '';
+  return `<div class="meta-chip">🎯 MITRE: <span>${parts.join(' · ')}</span>${link}</div>`;
 }
 
 function setActiveSection(sectionId) {
@@ -2486,7 +2571,7 @@ function renderTable(events) {
     const dangerIcon = danger === 'Alto' ? '🔴' : danger === 'Medio' ? '🟡' : '🟢';
     return `<tr onclick="openModal(${ev.id})">
       <td><span class="badge ${badgeClass}">${dangerIcon} ${escapeHtml(danger)}</span></td>
-      <td class="attack-type">${escapeHtml(ev.attack_type || 'Unknown')}</td>
+      <td class="attack-type">${escapeHtml(ev.attack_type || 'Unknown')}<br>${renderMitreBadge(ev)}</td>
       <td>${renderRisk(ev.risk_score)}</td>
       <td class="ip-text" onclick="openIpDetail('${escapeHtml(ev.ip || '')}', event)">${escapeHtml(ev.ip || 'n/d')}</td>
       <td class="country-text">🌍 ${escapeHtml(ev.country || 'Unknown')}</td>
@@ -2597,6 +2682,10 @@ async function openIpDetail(ip, event) {
           <div class="ip-section-title">USER-AGENT</div>
           ${renderTopList(detail.top_user_agents)}
         </div>
+        <div class="ip-detail-section ip-timeline">
+          <div class="ip-section-title">🔍 DISCOVERY ATT&CK</div>
+          ${renderDiscoveryBadges(detail.discovery)}
+        </div>
       </div>
     `;
     document.getElementById('ipModalOverlay').classList.add('open');
@@ -2618,12 +2707,14 @@ function setSelectOptions(id, values) {
 function updateFilterOptions() {
   const services = Array.from(new Set(allEvents.map(ev => ev.service).filter(Boolean).map(v => String(v).toUpperCase()))).sort();
   const attacks = Array.from(new Set(allEvents.map(ev => ev.attack_type).filter(Boolean))).sort();
+  const mitre = Array.from(new Set(allEvents.map(ev => ev.mitre_technique).filter(Boolean))).sort();
   const countries = Array.from(new Set(allEvents.map(ev => ev.country).filter(Boolean))).sort();
-  const signature = JSON.stringify([services, attacks, countries]);
+  const signature = JSON.stringify([services, attacks, mitre, countries]);
   if (signature === filterOptionsSignature) return;
   filterOptionsSignature = signature;
   setSelectOptions('filterService', services);
   setSelectOptions('filterAttackType', attacks);
+  setSelectOptions('filterMitre', mitre);
   setSelectOptions('filterCountry', countries);
 }
 
@@ -2632,6 +2723,7 @@ function getAdvancedFilters() {
     search: (document.getElementById('filterSearch')?.value || '').trim().toLowerCase(),
     service: document.getElementById('filterService')?.value || '',
     attackType: document.getElementById('filterAttackType')?.value || '',
+    mitre: document.getElementById('filterMitre')?.value || '',
     country: document.getElementById('filterCountry')?.value || '',
     dateFrom: document.getElementById('filterDateFrom')?.value || '',
     dateTo: document.getElementById('filterDateTo')?.value || '',
@@ -2643,6 +2735,7 @@ function eventMatchesFilters(ev, filters) {
   if (currentFilter !== 'all' && danger !== currentFilter) return false;
   if (filters.service && String(ev.service || '').toUpperCase() !== filters.service) return false;
   if (filters.attackType && (ev.attack_type || '') !== filters.attackType) return false;
+  if (filters.mitre && (ev.mitre_technique || '') !== filters.mitre) return false;
   if (filters.country && (ev.country || '') !== filters.country) return false;
 
   if (filters.dateFrom || filters.dateTo) {
@@ -2669,6 +2762,10 @@ function eventMatchesFilters(ev, filters) {
       ev.danger_level,
       ev.explanation_it,
       ev.advice,
+      ev.mitre_technique,
+      ev.mitre_subtechnique,
+      ev.mitre_technique_name,
+      ev.mitre_subtechnique_name,
     ].map(value => String(value || '').toLowerCase()).join(' ');
     if (!haystack.includes(filters.search)) return false;
   }
@@ -2857,6 +2954,10 @@ function renderIncidentDetail(detail) {
         ${renderEvidenceList([...(evidence.sessions || []), ...(evidence.user_agents || [])])}
       </div>
       <div class="incident-panel full">
+        <div class="incident-label">🔍 DISCOVERY ATT&CK</div>
+        ${renderDiscoveryBadges(detail.discovery)}
+      </div>
+      <div class="incident-panel full">
         <div class="incident-label">TIMELINE INCIDENTE</div>
         ${renderIncidentTimeline(detail.timeline)}
       </div>
@@ -2879,6 +2980,7 @@ async function openModal(id) {
       <div class="meta-chip">📅 <span>${ts}</span></div>
       <div class="meta-chip">⚠️ Pericolo: <span class="badge ${badgeClass}" style="margin-left:4px;">${escapeHtml(danger)}</span></div>
       <div class="meta-chip">Risk: <span>${renderRisk(ev.risk_score)}</span></div>
+      ${renderMitreMeta(ev)}
     `;
     document.getElementById('modalContent').innerHTML = renderIncidentDetail(detail);
 

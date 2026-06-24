@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .config import DB_PATH, EVENTS_EXPORT_PATH
+from .mitre import aggregate_discovery, map_attack_to_mitre, resolve_mitre
 from .utils import sha256_text
 
 SCHEMA = '''
@@ -26,6 +27,10 @@ CREATE TABLE IF NOT EXISTS events (
     danger_level TEXT,
     explanation_it TEXT,
     advice TEXT,
+    mitre_tactic TEXT,
+    mitre_technique TEXT,
+    mitre_subtechnique TEXT,
+    mitre_confidence TEXT,
     raw_event_json TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -77,9 +82,27 @@ def reset_events() -> Dict[str, int]:
     return {'events_deleted': events_count, 'raw_events_deleted': raw_count}
 
 
+# Colonne aggiunte dopo la prima release: vanno create con ALTER TABLE sui DB
+# esistenti (CREATE TABLE IF NOT EXISTS non aggiunge colonne a tabelle gia presenti).
+_EVENT_MIGRATIONS = {
+    'mitre_tactic': 'TEXT',
+    'mitre_technique': 'TEXT',
+    'mitre_subtechnique': 'TEXT',
+    'mitre_confidence': 'TEXT',
+}
+
+
+def _migrate_events(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute('PRAGMA table_info(events)').fetchall()}
+    for column, coltype in _EVENT_MIGRATIONS.items():
+        if column not in existing:
+            conn.execute(f'ALTER TABLE events ADD COLUMN {column} {coltype}')
+
+
 def init_db() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(SCHEMA)
+        _migrate_events(conn)
         conn.commit()
 
 
@@ -98,8 +121,9 @@ def insert_event(event: Dict[str, Any]) -> bool:
     INSERT OR IGNORE INTO events (
         event_hash, timestamp, source, ip, port, service, raw_payload,
         attack_type, country, city, lat, lon, danger_level,
-        explanation_it, advice, raw_event_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        explanation_it, advice, mitre_tactic, mitre_technique,
+        mitre_subtechnique, mitre_confidence, raw_event_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     values = (
         event['event_hash'], event.get('timestamp'), event.get('source'), event.get('ip'),
@@ -107,6 +131,8 @@ def insert_event(event: Dict[str, Any]) -> bool:
         event.get('attack_type'), event.get('country'), event.get('city'),
         event.get('lat'), event.get('lon'), event.get('danger_level'),
         event.get('explanation_it'), event.get('advice'),
+        event.get('mitre_tactic'), event.get('mitre_technique'),
+        event.get('mitre_subtechnique'), event.get('mitre_confidence'),
         json.dumps(event.get('raw_event', {}), ensure_ascii=False),
     )
     with get_conn() as conn:
@@ -219,17 +245,23 @@ def reconcile_events(
             seen_hashes.add(new_hash)
 
             explanation = explainer(attack_type)
+            mitre = map_attack_to_mitre(attack_type, record)
+            row_keys = row.keys()
             if (
                 row['event_hash'] != new_hash
                 or row['attack_type'] != attack_type
                 or row['danger_level'] != explanation.get('danger_level')
                 or row['explanation_it'] != explanation.get('explanation_it')
                 or row['advice'] != explanation.get('advice')
+                or ('mitre_technique' in row_keys and row['mitre_technique'] != mitre.get('mitre_technique'))
+                or ('mitre_subtechnique' in row_keys and row['mitre_subtechnique'] != mitre.get('mitre_subtechnique'))
+                or ('mitre_confidence' in row_keys and row['mitre_confidence'] != mitre.get('mitre_confidence'))
             ):
                 conn.execute(
                     '''
                     UPDATE events
-                    SET event_hash = ?, attack_type = ?, danger_level = ?, explanation_it = ?, advice = ?
+                    SET event_hash = ?, attack_type = ?, danger_level = ?, explanation_it = ?, advice = ?,
+                        mitre_tactic = ?, mitre_technique = ?, mitre_subtechnique = ?, mitre_confidence = ?
                     WHERE id = ?
                     ''',
                     (
@@ -238,6 +270,10 @@ def reconcile_events(
                         explanation.get('danger_level'),
                         explanation.get('explanation_it'),
                         explanation.get('advice'),
+                        mitre.get('mitre_tactic'),
+                        mitre.get('mitre_technique'),
+                        mitre.get('mitre_subtechnique'),
+                        mitre.get('mitre_confidence'),
                         row['id'],
                     ),
                 )
@@ -306,6 +342,13 @@ def _enrich_event_risk(event: Dict[str, Any], raw_events: Optional[List[Dict[str
     score = _event_risk_score(enriched, raw_events=raw_events)
     enriched['risk_score'] = score
     enriched['risk_level'] = _risk_band(score)
+    # Espande gli ID MITRE salvati in nomi ufficiali + URL (read-time).
+    enriched.update(resolve_mitre(
+        enriched.get('mitre_tactic'),
+        enriched.get('mitre_technique'),
+        enriched.get('mitre_subtechnique'),
+        enriched.get('mitre_confidence'),
+    ))
     return enriched
 
 
@@ -532,6 +575,7 @@ def fetch_incident_detail(event_id: int, limit: int = 120) -> Optional[Dict[str,
             'user_agents': _top_counts(item.get('user_agent') for item in raw_events),
             'sessions': _top_counts(item.get('session') for item in raw_events),
         },
+        'discovery': aggregate_discovery(item.get('command') for item in raw_events),
         'timeline': timeline[-limit:],
     }
 
@@ -769,6 +813,7 @@ def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
         'top_commands': _top_counts(raw.get('command') for raw in raw_events),
         'top_paths': _top_counts((raw.get('path') or raw.get('uri')) for raw in raw_events),
         'top_user_agents': _top_counts((raw.get('user_agent') for raw in raw_events), limit=8),
+        'discovery': aggregate_discovery(raw.get('command') for raw in raw_events),
         'events': events[-limit:],
         'raw_events': raw_events[-limit:],
         'timeline': timeline,
