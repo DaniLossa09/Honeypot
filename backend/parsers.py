@@ -173,11 +173,85 @@ def parse_ftp_line(line: str) -> Optional[Dict[str, Any]]:
     return record
 
 
+def parse_mysql_line(line: str) -> Optional[Dict[str, Any]]:
+    obj = safe_json_loads(line)
+    if not obj:
+        return None
+    event = str(obj.get('event') or '').lower()
+    username = obj.get('username')
+    argument = obj.get('database') or obj.get('query') or ''
+    return {
+        'timestamp': normalize_timestamp(obj.get('timestamp')),
+        'source': 'mysql',
+        'ip': extract_ip(obj.get('src_ip'), obj.get('remote_ip'), obj),
+        'port': _coerce_port(obj.get('src_port') or obj.get('dst_port')) or 3306,
+        'service': 'mysql',
+        'message': event,
+        'eventid': event,
+        'username': username,
+        'argument': argument,
+        'command': event.upper() if event else None,
+        'raw_payload': json.dumps(obj, ensure_ascii=False),
+        'raw_event': obj,
+    }
+
+
+def parse_smb_line(line: str) -> Optional[Dict[str, Any]]:
+    obj = safe_json_loads(line)
+    if not obj:
+        return None
+    event = str(obj.get('event') or '').lower()
+    username = obj.get('username')
+    domain = obj.get('domain') or ''
+    full_user = f"{domain}\\{username}" if domain and username else (username or None)
+    return {
+        'timestamp': normalize_timestamp(obj.get('timestamp')),
+        'source': 'smb',
+        'ip': extract_ip(obj.get('src_ip'), obj.get('remote_ip'), obj),
+        'port': _coerce_port(obj.get('src_port') or obj.get('dst_port')) or 445,
+        'service': 'smb',
+        'message': event,
+        'eventid': event,
+        'username': full_user,
+        'command': event.upper() if event else None,
+        'raw_payload': json.dumps(obj, ensure_ascii=False),
+        'raw_event': obj,
+    }
+
+
+def parse_scada_line(line: str) -> Optional[Dict[str, Any]]:
+    obj = safe_json_loads(line)
+    if not obj:
+        return None
+    remote_host = obj.get('remote_host') or obj.get('src_ip') or extract_ip(obj)
+    data_type = str(obj.get('data_type') or obj.get('protocol') or obj.get('session_type') or 'scada').lower()
+    port_map = {'modbus': 502, 's7comm': 102, 'enip': 44818, 'bacnet': 47808}
+    local_port = _coerce_port(obj.get('local_port') or obj.get('dst_port')) or port_map.get(data_type, 502)
+    data = obj.get('data') or {}
+    message = str(obj.get('message') or data_type)
+    return {
+        'timestamp': normalize_timestamp(obj.get('timestamp')),
+        'source': 'scada',
+        'ip': remote_host,
+        'port': _coerce_port(obj.get('remote_port') or obj.get('src_port')) or 0,
+        'service': data_type,
+        'message': message,
+        'eventid': data_type,
+        'command': str(data.get('function_code') or data.get('fc') or data_type).upper(),
+        'argument': json.dumps(data, ensure_ascii=False) if data else '',
+        'raw_payload': json.dumps(obj, ensure_ascii=False),
+        'raw_event': obj,
+    }
+
+
 PARSERS = {
     'cowrie': parse_cowrie_line,
     'opencanary': parse_opencanary_line,
     'dionaea': parse_dionaea_line,
     'ftp': parse_ftp_line,
+    'mysql': parse_mysql_line,
+    'smb': parse_smb_line,
+    'scada': parse_scada_line,
 }
 
 

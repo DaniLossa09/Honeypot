@@ -1,0 +1,22 @@
+[Unit]
+Description=HoneypotX API + Processor (FastAPI + log pipeline)
+# Avvia dopo rete e Docker: i container honeypot devono poter scrivere i log
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# IMPORTANTE: gira come cyferwall (uid 1000), MAI root. File DB/data/config
+# di proprieta root renderebbero il DB readonly (vedi CLAUDE.md, sezione permessi).
+User=cyferwall
+Group=cyferwall
+WorkingDirectory=/home/cyferwall/honeypot
+ExecStart=/home/cyferwall/honeypot/.venv/bin/python /home/cyferwall/honeypot/run_all.py
+Restart=on-failure
+RestartSec=5
+# Log del servizio consultabili con: journalctl -u honeypotx -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

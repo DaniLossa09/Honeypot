@@ -1122,12 +1122,32 @@
     color: var(--accent2);
     letter-spacing: 2px;
     margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .advice-text {
     font-size: 13px;
     line-height: 1.6;
     color: var(--text);
+  }
+
+  .ai-profile-section {
+    background: rgba(120,100,255,0.04);
+    border-color: rgba(120,100,255,0.18);
+  }
+
+  .ai-source-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    color: #00cc88;
+    background: rgba(0,204,136,0.1);
+    border: 1px solid rgba(0,204,136,0.25);
+    border-radius: 4px;
+    padding: 1px 6px;
+    letter-spacing: 1px;
   }
 
   .raw-section {
@@ -2925,12 +2945,17 @@ function renderIncidentDetail(detail) {
       <button class="export-btn" onclick="downloadReport('/incident/${eventId}/export?format=json', 'incident-${eventId}.json')">ESPORTA JSON</button>
     </div>
     <div class="ai-section">
-      <div class="ai-label">SPIEGAZIONE ATTACCO</div>
-      <div class="ai-text">${escapeHtml(detail.event.explanation_it || 'Spiegazione non disponibile.')}</div>
+      <div class="ai-label">SPIEGAZIONE ATTACCO ${detail.event.ai_explanation ? '<span class="ai-source-badge">✦ AI</span>' : ''}</div>
+      <div class="ai-text">${escapeHtml(detail.event.ai_explanation || detail.event.explanation_it || 'Spiegazione non disponibile.')}</div>
     </div>
+    ${detail.event.ai_attacker_profile ? `
+    <div class="ai-section ai-profile-section">
+      <div class="ai-label">PROFILO ATTACCANTE <span class="ai-source-badge">✦ AI</span></div>
+      <div class="ai-text">${escapeHtml(detail.event.ai_attacker_profile)}</div>
+    </div>` : ''}
     <div class="advice-section">
-      <div class="advice-label">COME DIFENDERSI</div>
-      <div class="advice-text">${escapeHtml(detail.event.advice || 'Nessun consiglio disponibile.')}</div>
+      <div class="advice-label">COME DIFENDERSI ${detail.event.ai_defense ? '<span class="ai-source-badge">✦ AI</span>' : ''}</div>
+      <div class="advice-text">${escapeHtml(detail.event.ai_defense || detail.event.advice || 'Nessun consiglio disponibile.')}</div>
     </div>
     <div class="incident-grid">
       <div class="incident-panel full">

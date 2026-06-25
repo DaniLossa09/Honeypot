@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
+from .ai_analyst import analyze_event
 from .classifier import classify_attack, classify_signal
 from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
 from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
@@ -112,6 +113,8 @@ class Processor:
             'Malware Upload': 'malware_upload',
             'Web Crawl / Recon': 'web_recon',
             'FTP Attack': 'ftp_transfer',
+            'Database Attack': 'database_attack',
+            'SCADA Attack': 'scada_attack',
         }
         key = key_map.get(attack_type)
         if not key:
@@ -149,6 +152,7 @@ class Processor:
                 record.update(explain_attack(record['attack_type']))
                 record.update(map_attack_to_mitre(attack_type, record))
                 record.update(self.geo.resolve(record.get('ip')))
+                record.update(analyze_event(record))
                 record['event_hash'] = self._event_hash(record)
                 if insert_event(record):
                     inserted_count += 1

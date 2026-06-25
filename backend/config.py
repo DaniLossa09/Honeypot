@@ -40,10 +40,20 @@ LOG_PATHS = {
     'cowrie': os.getenv('HPX_COWRIE_LOG', '/home/cyferwall/honeypot/honeypots/logs/cowrie/cowrie.json'),
     'opencanary': os.getenv('HPX_OPENCANARY_LOG', '/home/cyferwall/honeypot/honeypots/logs/opencanary/opencanary.log'),
     'ftp': os.getenv('HPX_FTP_LOG', '/home/cyferwall/honeypot/honeypots/logs/ftp/ftp.json'),
+    'mysql': os.getenv('HPX_MYSQL_LOG', '/home/cyferwall/honeypot/honeypots/logs/mysql/mysql.json'),
+    'smb': os.getenv('HPX_SMB_LOG', '/home/cyferwall/honeypot/honeypots/logs/smb/smb.json'),
+    'scada': os.getenv('HPX_SCADA_LOG', '/home/cyferwall/honeypot/honeypots/logs/scada/conpot.json'),
 }
 
 GEO_API_BASE = os.getenv('HPX_GEO_API_BASE', 'http://ip-api.com/json')
 POLL_INTERVAL_SECONDS = int(os.getenv('HPX_POLL_INTERVAL', '3'))
+
+# Analisi AI degli eventi (Claude Haiku via API Anthropic).
+# Se HPX_ANTHROPIC_API_KEY non e' impostata, AI_ENABLED e' False e il sistema
+# usa il testo statico di explainer.py come fallback automatico.
+ANTHROPIC_API_KEY = os.getenv('HPX_ANTHROPIC_API_KEY', '')
+AI_MODEL = os.getenv('HPX_AI_MODEL', 'claude-haiku-4-5-20251001')
+AI_ENABLED = bool(ANTHROPIC_API_KEY) and os.getenv('HPX_AI_ENABLED', '1').lower() not in ('0', 'false', 'no')
 # La dashboard e servita in LAN (0.0.0.0:8080) e calcola l'API base come
 # http://<hostname>:8000, quindi il browser dei device remoti deve poter
 # raggiungere l'API: bind su tutte le interfacce. Gli endpoint dati sono

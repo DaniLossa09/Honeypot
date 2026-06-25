@@ -66,6 +66,16 @@ EXPLAINERS: Dict[str, Dict[str, str]] = {
         'explanation_it': 'L origine remota sta enumerando porte o servizi aperti per capire quali superfici di attacco sono disponibili.',
         'advice': 'Chiudi porte inutilizzate, segmenta la rete e usa firewall con logging per correlare le scansioni.',
     },
+    'Database Attack': {
+        'danger_level': 'Alto',
+        'explanation_it': "L'attaccante si è connesso al servizio di database ed ha inviato comandi o query. Potrebbe trattarsi di ricognizione, estrazione dati o tentativo di compromissione del database.",
+        'advice': 'Non esporre mai database su porte pubbliche, usa firewall per limitare l\'accesso a IP autorizzati e abilita audit logging su tutte le query.',
+    },
+    'SCADA Attack': {
+        'danger_level': 'Alto',
+        'explanation_it': "L'attaccante ha interagito con il sistema di controllo industriale (SCADA/ICS). Questi sistemi gestiscono infrastrutture fisiche: un attacco riuscito può causare danni operativi reali.",
+        'advice': 'Isola la rete OT da Internet e dalla rete IT, applica segmentazione e monitoraggio specifico per protocolli industriali (Modbus, S7, DNP3).',
+    },
     'Unknown': {
         'danger_level': 'Basso',
         'explanation_it': "L'evento e reale ma non corrisponde ancora a una firma nota. Va conservato per analisi successive.",

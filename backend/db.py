@@ -89,6 +89,9 @@ _EVENT_MIGRATIONS = {
     'mitre_technique': 'TEXT',
     'mitre_subtechnique': 'TEXT',
     'mitre_confidence': 'TEXT',
+    'ai_explanation': 'TEXT',
+    'ai_attacker_profile': 'TEXT',
+    'ai_defense': 'TEXT',
 }
 
 
@@ -122,8 +125,10 @@ def insert_event(event: Dict[str, Any]) -> bool:
         event_hash, timestamp, source, ip, port, service, raw_payload,
         attack_type, country, city, lat, lon, danger_level,
         explanation_it, advice, mitre_tactic, mitre_technique,
-        mitre_subtechnique, mitre_confidence, raw_event_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        mitre_subtechnique, mitre_confidence,
+        ai_explanation, ai_attacker_profile, ai_defense,
+        raw_event_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     values = (
         event['event_hash'], event.get('timestamp'), event.get('source'), event.get('ip'),
@@ -133,6 +138,7 @@ def insert_event(event: Dict[str, Any]) -> bool:
         event.get('explanation_it'), event.get('advice'),
         event.get('mitre_tactic'), event.get('mitre_technique'),
         event.get('mitre_subtechnique'), event.get('mitre_confidence'),
+        event.get('ai_explanation'), event.get('ai_attacker_profile'), event.get('ai_defense'),
         json.dumps(event.get('raw_event', {}), ensure_ascii=False),
     )
     with get_conn() as conn:
@@ -308,9 +314,11 @@ def _event_risk_score(event: Dict[str, Any], raw_events: Optional[List[Dict[str,
         'IDOR Attempt': 62,
         'Unauthorized Login': 75,
         'SQL Injection': 78,
+        'Database Attack': 72,
         'Command Injection': 86,
         'Malware Upload': 90,
         'SMB Attack': 82,
+        'SCADA Attack': 88,
     }.get(attack_type, 35)
 
     score += {'Alto': 8, 'Medio': 4, 'Basso': 0}.get(danger, 0)

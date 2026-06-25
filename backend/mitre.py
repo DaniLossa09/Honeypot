@@ -161,6 +161,16 @@ def map_attack_to_mitre(attack_type: Optional[str], record: Dict[str, Any]) -> D
         # RETR/DELE/RNFR/... : direzione/intento ambigui -> non classificato.
         return _empty()
 
+    if attack_type == "Database Attack":
+        # Query/comandi verso DB honeypot: exploitation generica di servizio esposto.
+        return _entry("TA0001", "T1190", None, "Medio")
+
+    if attack_type == "SCADA Attack":
+        # Interazione con protocolli ICS/SCADA. T1210 e' il piu' vicino in
+        # ATT&CK Enterprise; i protocolli ICS hanno una matrice separata (ICS ATT&CK)
+        # che non e' inclusa qui -> confidenza Basso.
+        return _entry("TA0008", "T1210", None, "Basso")
+
     # --- Mapping approssimati (Basso = "incerto"): nessuna technique ATT&CK
     # descrive esattamente questi attacchi, ma manteniamo un riferimento ----
     if attack_type == "IDOR Attempt":

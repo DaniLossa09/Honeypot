@@ -50,3 +50,37 @@ services:
       - ./fake_corp/ftp_root:/opt/dionaea/fake_corp/ftp_root:ro
     networks:
       - honeypot-net
+
+  mysql-honeypot:
+    build: ./mysql
+    container_name: mysql-honeypot
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./logs/mysql:/opt/honeypot/logs
+    networks:
+      - honeypot-net
+
+  smb-honeypot:
+    build: ./smb
+    container_name: smb-honeypot
+    restart: unless-stopped
+    ports:
+      - "445:445"
+    volumes:
+      - ./logs/smb:/opt/honeypot/logs
+    networks:
+      - honeypot-net
+
+  scada-honeypot:
+    build: ./scada
+    container_name: scada-honeypot
+    restart: unless-stopped
+    ports:
+      - "502:502"   # Modbus/TCP
+      - "102:102"   # S7comm / ISO-on-TCP (Siemens S7)
+    volumes:
+      - ./logs/scada:/opt/honeypot/logs
+    networks:
+      - honeypot-net

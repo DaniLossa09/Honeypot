@@ -142,6 +142,33 @@ def _classify_web(record: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _classify_mysql(record: Dict[str, Any]) -> Optional[str]:
+    eventid = str(record.get('eventid') or '').lower()
+    if eventid == 'query':
+        text = _text(record)
+        if _match_any(SQLI_PATTERNS, text):
+            return 'SQL Injection'
+        return 'Database Attack'
+    # login_attempt e connection: gestiti come segnale in classify_signal
+    return None
+
+
+def _classify_smb(record: Dict[str, Any]) -> Optional[str]:
+    eventid = str(record.get('eventid') or '').lower()
+    text = _text(record)
+    if _match_any(MALWARE_PATTERNS, text):
+        return 'Malware Upload'
+    if eventid == 'auth_attempt':
+        # sotto soglia → segnale; qui ritorniamo None e lasciamo a classify_signal
+        return None
+    # connection senza auth = noise
+    return None
+
+
+def _classify_scada(record: Dict[str, Any]) -> Optional[str]:
+    return 'SCADA Attack'
+
+
 def classify_attack(record: Dict[str, Any]) -> Optional[str]:
     text = _text(record)
     port = int(record.get('port') or 0)
@@ -154,10 +181,12 @@ def classify_attack(record: Dict[str, Any]) -> Optional[str]:
         return _classify_ftp(record)
     if source == 'opencanary' or service in {'http', 'https'} or port in {80, 443}:
         return _classify_web(record)
-    if 'smb' in service or port == 445:
-        if _match_any(MALWARE_PATTERNS, text) or 'download' in text:
-            return 'Malware Upload'
-        return 'SMB Attack'
+    if source == 'mysql' or service == 'mysql' or port == 3306:
+        return _classify_mysql(record)
+    if source == 'smb' or service == 'smb' or port == 445:
+        return _classify_smb(record)
+    if source == 'scada' or service in {'modbus', 's7comm', 'enip', 'bacnet'} or port in {502, 102, 44818, 47808}:
+        return _classify_scada(record)
     if re.search(r'\b(portscan|port scan|syn scan|portprobe)\b', text):
         return 'Port Scan'
     return None
@@ -175,5 +204,9 @@ def classify_signal(record: Dict[str, Any]) -> Optional[str]:
     if source == 'ftp' and command in {'PASS', 'ACCT'} and str(record.get('argument') or '').strip():
         return 'Credential Attack'
     if source == 'opencanary' and logtype == '3001' and _has_submitted_credentials(record):
+        return 'Credential Attack'
+    if source == 'mysql' and eventid == 'login_attempt':
+        return 'Credential Attack'
+    if source == 'smb' and eventid == 'auth_attempt' and record.get('username'):
         return 'Credential Attack'
     return None

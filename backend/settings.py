@@ -12,6 +12,9 @@ DEFAULT_ATTACK_SETTINGS: Dict[str, Any] = {
         'cowrie': True,
         'opencanary': True,
         'ftp': True,
+        'mysql': True,
+        'smb': True,
+        'scada': True,
     },
     'enabled_direct_attacks': {
         'unauthorized_login': True,
@@ -23,6 +26,8 @@ DEFAULT_ATTACK_SETTINGS: Dict[str, Any] = {
         'malware_upload': True,
         'web_recon': True,
         'ftp_transfer': True,
+        'database_attack': True,
+        'scada_attack': True,
     },
 }
 
@@ -64,12 +69,16 @@ def validate_attack_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         validated[key] = _bounded_int(merged.get(key), fallback, minimum, maximum)
 
     validated['post_login_dedupe_by_session'] = bool(merged.get('post_login_dedupe_by_session'))
+    # Unisce le sorgenti/attacchi del file di config con i default, preservando
+    # chiavi nuove aggiunte in DEFAULT che potrebbero non essere nel file salvato.
+    merged_sources = {**DEFAULT_ATTACK_SETTINGS['enabled_sources'], **merged.get('enabled_sources', {})}
     validated['enabled_sources'] = {
-        source: bool(merged.get('enabled_sources', {}).get(source, enabled))
+        source: bool(merged_sources.get(source, enabled))
         for source, enabled in DEFAULT_ATTACK_SETTINGS['enabled_sources'].items()
     }
+    merged_attacks = {**DEFAULT_ATTACK_SETTINGS['enabled_direct_attacks'], **merged.get('enabled_direct_attacks', {})}
     validated['enabled_direct_attacks'] = {
-        attack: bool(merged.get('enabled_direct_attacks', {}).get(attack, enabled))
+        attack: bool(merged_attacks.get(attack, enabled))
         for attack, enabled in DEFAULT_ATTACK_SETTINGS['enabled_direct_attacks'].items()
     }
     return validated
