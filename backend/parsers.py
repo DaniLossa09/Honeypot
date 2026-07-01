@@ -32,10 +32,22 @@ def _read_new_lines(path: Path, offset: int) -> tuple[list[str], int]:
     if offset > size:
         offset = 0
 
-    with path.open('r', encoding='utf-8', errors='ignore') as f:
+    # Lettura in binario per calcolare offset in byte esatti: consumiamo solo le
+    # righe complete (che terminano con \n) e lasciamo l'eventuale ultima riga
+    # parziale (log ancora in scrittura) al ciclo successivo, senza avanzare
+    # l'offset oltre di essa. Cosi non si perdono righe scritte a meta.
+    with path.open('rb') as f:
         f.seek(offset)
-        lines = f.readlines()
-        new_offset = f.tell()
+        data = f.read()
+
+    last_nl = data.rfind(b'\n')
+    if last_nl == -1:
+        # nessuna riga completa ancora disponibile: non avanzare l'offset
+        return [], offset
+
+    complete = data[:last_nl + 1]
+    new_offset = offset + len(complete)
+    lines = complete.decode('utf-8', errors='ignore').splitlines()
     return lines, new_offset
 
 

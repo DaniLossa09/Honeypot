@@ -136,7 +136,6 @@ class Processor:
                 continue
             current_offset = self.offsets.get(source, 0)
             records, new_offset = read_incremental(source, path, current_offset)
-            self.offsets[source] = new_offset
             for record in records:
                 insert_raw_event(record)
                 attack_type = classify_attack(record)
@@ -156,6 +155,11 @@ class Processor:
                 record['event_hash'] = self._event_hash(record)
                 if insert_event(record):
                     inserted_count += 1
+            # Avanza l'offset solo dopo aver processato l'intero blocco: se il
+            # ciclo sopra lancia (geo/AI/insert), l'offset resta indietro e le
+            # righe non inserite vengono riprocessate al giro dopo. Gli insert
+            # sono idempotenti (event_hash), quindi il replay non crea duplicati.
+            self.offsets[source] = new_offset
         self._save_offsets()
         self.export_events_json()
         return inserted_count

@@ -3,12 +3,19 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.auth import AuthError, authenticate, verify_authorization_header
+from backend.auth import (
+    AuthError,
+    authenticate,
+    load_auth_config,
+    verify_authorization_header,
+    verify_password,
+)
 from backend.config import FRONTEND_ORIGIN, POLL_INTERVAL_SECONDS
+from backend.ratelimit import RateLimiter
 from backend.db import (
     fetch_attack_distribution,
     fetch_event_by_id,
@@ -25,6 +32,13 @@ from backend.reports import export_incident_report, export_ip_report
 from backend.settings import load_attack_settings, save_attack_settings
 
 processor = Processor()
+
+# Max 10 login falliti per IP in 5 minuti, poi 429 finche' non scade la finestra.
+_login_limiter = RateLimiter(max_attempts=10, window_seconds=300)
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else 'unknown'
 
 
 def require_auth(authorization: str = Header(default='')) -> Dict[str, Any]:
@@ -79,11 +93,19 @@ def health() -> Dict[str, Any]:
 
 
 @app.post('/auth/login')
-def login(credentials: Dict[str, str]) -> Dict[str, Any]:
+def login(credentials: Dict[str, str], request: Request) -> Dict[str, Any]:
+    ip = _client_ip(request)
+    if _login_limiter.is_locked(ip):
+        raise HTTPException(
+            status_code=429,
+            detail='Troppi tentativi di login. Riprova tra qualche minuto.',
+        )
     try:
         token = authenticate(credentials.get('username') or '', credentials.get('password') or '')
     except AuthError as exc:
+        _login_limiter.record_failure(ip)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    _login_limiter.reset(ip)
     return {'access_token': token, 'token_type': 'bearer'}
 
 
@@ -120,7 +142,18 @@ def get_storylines(limit: int = 50, _: Dict[str, Any] = Depends(require_auth)) -
 
 
 @app.post('/reset-attacks')
-def reset_attacks(_: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
+def reset_attacks(
+    payload: Dict[str, str],
+    _: Dict[str, Any] = Depends(require_auth),
+) -> Dict[str, Any]:
+    # Conferma con la password della dashboard prima di cancellare gli attacchi.
+    password = (payload or {}).get('password') or ''
+    try:
+        config = load_auth_config()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail='Configurazione auth non disponibile') from exc
+    if not verify_password(password, str(config.get('password_hash') or '')):
+        raise HTTPException(status_code=403, detail='Password non valida')
     result = processor.reset_attacks()
     return {'status': 'ok', **result}
 

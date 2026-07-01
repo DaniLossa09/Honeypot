@@ -2011,11 +2011,15 @@ async function fetchJson(path) {
   return res.json();
 }
 
-async function postJson(path) {
+async function postJson(path, payload) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     cache: 'no-store',
-    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    headers: {
+      ...(payload !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
   });
   if (res.status === 401) {
     logout();
@@ -2381,20 +2385,39 @@ function buildDistribution(events) {
     .sort((a, b) => b.count - a.count || a.attack_type.localeCompare(b.attack_type));
 }
 
+// Punto placeholder per gli attacchi locali (LAN): non hanno geo reale, ma li
+// mostriamo comunque su un marker fisso cosi la mappa non resta vuota in test.
+// Impostato sulla posizione approssimativa dell'honeypot (Bergamo, IT).
+const LOCAL_MAP_COORDS = [45.6983, 9.6773];
+
 function buildMapPoints(events) {
   const grouped = new Map();
   events.forEach(ev => {
-    if (ev.lat == null || ev.lon == null) return;
-    const key = [ev.lat, ev.lon, ev.country || '', ev.city || '', ev.attack_type || 'Unknown'].join('|');
+    let lat = ev.lat;
+    let lon = ev.lon;
+    let isLocal = false;
+    if (lat == null || lon == null) {
+      // Solo gli eventi 'Local' vengono forzati sul placeholder; gli 'Unknown'
+      // (geo fallita) restano non mappabili.
+      if ((ev.country || '') === 'Local') {
+        lat = LOCAL_MAP_COORDS[0];
+        lon = LOCAL_MAP_COORDS[1];
+        isLocal = true;
+      } else {
+        return;
+      }
+    }
+    const key = [lat, lon, ev.country || '', ev.city || '', ev.attack_type || 'Unknown'].join('|');
     const current = grouped.get(key) || {
-      lat: ev.lat,
-      lon: ev.lon,
+      lat,
+      lon,
       country: ev.country,
       city: ev.city,
       attack_type: ev.attack_type || 'Unknown',
       sample_ip: ev.ip,
       sample_service: ev.service,
       danger_level: ev.danger_level || 'Basso',
+      is_local: isLocal,
       count: 0,
     };
     current.count += 1;
@@ -2439,7 +2462,11 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
   points.forEach((point) => {
     if (point.lat == null || point.lon == null) return;
     const danger = point.danger_level || 'Basso';
-    const color = danger === 'Alto' ? '#ff3355' : danger === 'Medio' ? '#ffaa00' : '#00ff88';
+    // Attacchi locali (LAN) in azzurro; gli altri per livello di pericolo.
+    const color = point.is_local ? '#58a6ff'
+      : danger === 'Alto' ? '#ff3355'
+      : danger === 'Medio' ? '#ffaa00'
+      : '#00ff88';
     const size = Math.min(8 + (point.count || 1) * 4, 24);
     const icon = L.divIcon({
       html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; border:2px solid rgba(255,255,255,0.3); box-shadow:0 0 ${size}px ${color}88; animation:pulse-marker 2s ease-in-out infinite;"></div>`,
@@ -2448,6 +2475,7 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
     const marker = L.marker([point.lat, point.lon], { icon }).bindPopup(`
       <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
         <div style="color:#fff; font-size:14px; margin-bottom:6px;">${point.attack_type}</div>
+        ${point.is_local ? '<div style="color:#58a6ff;">🏠 Rete locale (LAN) — posizione approssimata</div>' : ''}
         <div>🌐 ${point.sample_ip || 'n/d'}</div>
         <div>📍 ${point.city || 'Unknown'}, ${point.country || 'Unknown'}</div>
         <div>🔌 ${(point.sample_service || 'unknown').toUpperCase()}</div>
@@ -2460,7 +2488,15 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
   });
 
   if (bounds.length && shouldAutoFit) {
-    targetMap.fitBounds(bounds, { padding: [30, 30] });
+    const uniqueCoords = new Set(bounds.map(b => b.join(',')));
+    if (uniqueCoords.size <= 1) {
+      // Un solo punto (es. solo traffico locale): vista mondiale centrata sul
+      // pin, cosi si vede tutto il globo senza zoom eccessivo sul mare.
+      targetMap.setView(bounds[0], 3);
+    } else {
+      // Piu punti: adatta la vista ma senza scendere a livello stradale.
+      targetMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+    }
   } else if (!bounds.length && shouldAutoFit) {
     targetMap.setView([20, 0], 2);
   }
@@ -2826,14 +2862,43 @@ function clearAdvancedFilters() {
   applyCurrentFilter();
 }
 
+// Prompt password mascherato (window.prompt mostra il testo in chiaro).
+function promptPassword(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:99999;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:20px;min-width:300px;max-width:90vw;font-family:"IBM Plex Mono",monospace;color:#c9d1d9;box-shadow:0 12px 40px rgba(0,0,0,0.6);';
+    box.innerHTML = `
+      <div style="margin-bottom:12px;font-size:13px;">${escapeHtml(message)}</div>
+      <input type="password" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:9px;background:#161b22;border:1px solid #30363d;border-radius:6px;color:#fff;font-family:inherit;font-size:13px;margin-bottom:14px;">
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button data-act="cancel" style="padding:7px 14px;background:transparent;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-family:inherit;cursor:pointer;">Annulla</button>
+        <button data-act="ok" style="padding:7px 14px;background:#da3633;border:1px solid #da3633;border-radius:6px;color:#fff;font-family:inherit;cursor:pointer;">Conferma</button>
+      </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const input = box.querySelector('input');
+    input.focus();
+    const done = (val) => { if (overlay.parentNode) document.body.removeChild(overlay); resolve(val); };
+    box.querySelector('[data-act="ok"]').onclick = () => done(input.value);
+    box.querySelector('[data-act="cancel"]').onclick = () => done(null);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') done(input.value);
+      else if (e.key === 'Escape') done(null);
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) done(null); });
+  });
+}
+
 async function resetAttacks() {
   const firstCheck = window.confirm(
     'Stai per cancellare tutti gli attacchi e i dettagli tecnici importati dalla dashboard. I log sorgente resteranno su disco. Continuare?'
   );
   if (!firstCheck) return;
 
-  const typed = window.prompt('Secondo controllo: scrivi RESET per confermare la cancellazione.');
-  if (typed !== 'RESET') return;
+  const password = await promptPassword('Per confermare, inserisci la password della dashboard:');
+  if (!password) return;
 
   const btn = document.getElementById('resetBtn');
   if (btn) {
@@ -2842,7 +2907,7 @@ async function resetAttacks() {
   }
 
   try {
-    await postJson('/reset-attacks');
+    await postJson('/reset-attacks', { password });
     closeModalDirect();
     allEvents = [];
     renderStats({ total: 0, high: 0, medium: 0, countries: 0 });
@@ -2853,7 +2918,11 @@ async function resetAttacks() {
     await refreshDashboard();
   } catch (err) {
     console.error('Reset failed:', err);
-    window.alert('Reset non riuscito. Controlla che il backend API sia attivo.');
+    if (String(err && err.message || '').includes('403')) {
+      window.alert('Password non valida. Reset annullato.');
+    } else {
+      window.alert('Reset non riuscito. Controlla che il backend API sia attivo.');
+    }
   } finally {
     if (btn) {
       btn.disabled = false;

@@ -14,12 +14,18 @@ class ProcessorFlowTest(unittest.TestCase):
         self.cowrie_log = self.root / "cowrie.json"
         self.opencanary_log = self.root / "opencanary.log"
         self.ftp_log = self.root / "ftp.json"
+        self.mysql_log = self.root / "mysql.json"
+        self.smb_log = self.root / "smb.json"
+        self.scada_log = self.root / "scada.json"
         self.db_path = self.root / "honeypotx.db"
         self.offsets_path = self.root / "offsets.json"
         self.export_path = self.root / "events_export.json"
         self.geo_cache_path = self.root / "geo_cache.json"
 
-        for path in (self.cowrie_log, self.opencanary_log, self.ftp_log):
+        for path in (
+            self.cowrie_log, self.opencanary_log, self.ftp_log,
+            self.mysql_log, self.smb_log, self.scada_log,
+        ):
             path.write_text("", encoding="utf-8")
 
         self.old_env = os.environ.copy()
@@ -27,6 +33,11 @@ class ProcessorFlowTest(unittest.TestCase):
             "HPX_COWRIE_LOG": str(self.cowrie_log),
             "HPX_OPENCANARY_LOG": str(self.opencanary_log),
             "HPX_FTP_LOG": str(self.ftp_log),
+            # Override anche mysql/smb/scada: senza, i test leggono i log reali
+            # dei container (default hardcoded) e i conteggi diventano non deterministici.
+            "HPX_MYSQL_LOG": str(self.mysql_log),
+            "HPX_SMB_LOG": str(self.smb_log),
+            "HPX_SCADA_LOG": str(self.scada_log),
             "HPX_DB_PATH": str(self.db_path),
             "HPX_OFFSETS_PATH": str(self.offsets_path),
             "HPX_EVENTS_EXPORT_PATH": str(self.export_path),
@@ -373,6 +384,58 @@ class ProcessorFlowTest(unittest.TestCase):
         self.assertGreaterEqual(result["raw_events_deleted"], 2)
         self.assertEqual(self.db.fetch_events(), [])
         self.assertEqual(self.export_path.read_text(encoding="utf-8"), "[]")
+
+    def test_offset_not_advanced_when_cycle_fails_midway(self):
+        processor = self._processor()
+        for ip in ("192.0.2.10", "192.0.2.11"):
+            self._append_json(self.cowrie_log, {
+                "eventid": "cowrie.login.success",
+                "username": "admin",
+                "password": "password",
+                "src_ip": ip,
+                "timestamp": "2026-04-29T18:00:00Z",
+                "protocol": "ssh",
+            })
+
+        real_insert = self.db.insert_event
+
+        def flaky_insert(event):
+            if event.get("ip") == "192.0.2.11":
+                raise RuntimeError("boom")
+            return real_insert(event)
+
+        with patch.object(self.processor_module, "insert_event", flaky_insert):
+            with self.assertRaises(RuntimeError):
+                processor.process_once()
+
+        # L'offset non deve avanzare: il ciclo e' fallito prima di completare il blocco.
+        self.assertEqual(processor.offsets["cowrie"], 0)
+
+        # Secondo giro senza guasto: entrambi gli eventi presenti, nessun duplicato.
+        processor.process_once()
+        ips = {event["ip"] for event in self.db.fetch_events()}
+        self.assertEqual(ips, {"192.0.2.10", "192.0.2.11"})
+
+    def test_fetch_stats_excludes_local_and_unknown_countries(self):
+        self._processor()  # inizializza il DB
+        for index, (ip, country) in enumerate([
+            ("203.0.113.1", "Italy"),
+            ("203.0.113.2", "France"),
+            ("10.0.0.1", "Local"),
+            ("203.0.113.3", "Unknown"),
+        ]):
+            self.db.insert_event({
+                "event_hash": f"hash-{index}",
+                "ip": ip,
+                "country": country,
+                "attack_type": "Unauthorized Login",
+                "danger_level": "Alto",
+            })
+
+        stats = self.db.fetch_stats()
+        self.assertEqual(stats["total"], 4)
+        # Solo Italy e France: Local, Unknown (e NULL) sono esclusi dal conteggio.
+        self.assertEqual(stats["countries"], 2)
 
 
 if __name__ == "__main__":

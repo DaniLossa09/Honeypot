@@ -835,7 +835,7 @@ def fetch_stats() -> Dict[str, Any]:
               COUNT(*) as total,
               SUM(CASE WHEN danger_level = 'Alto' THEN 1 ELSE 0 END) as high,
               SUM(CASE WHEN danger_level = 'Medio' THEN 1 ELSE 0 END) as medium,
-              COUNT(DISTINCT country) as countries
+              COUNT(DISTINCT CASE WHEN country NOT IN ('Local', 'Unknown') THEN country END) as countries
             FROM events
         ''').fetchone()
     return {
