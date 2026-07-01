@@ -17,6 +17,7 @@ from backend.auth import (
 from backend.config import FRONTEND_ORIGIN, POLL_INTERVAL_SECONDS
 from backend.ratelimit import RateLimiter
 from backend.db import (
+    VALID_TRIAGE_STATUSES,
     fetch_attack_distribution,
     fetch_event_by_id,
     fetch_event_context,
@@ -26,6 +27,8 @@ from backend.db import (
     fetch_map_points,
     fetch_stats,
     fetch_storylines,
+    set_event_triage,
+    set_ip_triage,
 )
 from backend.processor import Processor
 from backend.reports import export_incident_report, export_ip_report
@@ -35,6 +38,10 @@ processor = Processor()
 
 # Max 10 login falliti per IP in 5 minuti, poi 429 finche' non scade la finestra.
 _login_limiter = RateLimiter(max_attempts=10, window_seconds=300)
+
+# Valori accettati dal filtro ?triage= su /events: gli status reali piu' due
+# scorciatoie di sola lettura ('triaged_out' = derubricati, 'all' = tutto).
+_TRIAGE_FILTER_VALUES = VALID_TRIAGE_STATUSES | {'triaged_out', 'all'}
 
 
 def _client_ip(request: Request) -> str:
@@ -115,9 +122,15 @@ def auth_me(user: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
 
 
 @app.get('/events')
-def get_events(limit: int = 200, _: Dict[str, Any] = Depends(require_auth)) -> List[Dict[str, Any]]:
+def get_events(
+    limit: int = 200,
+    triage: str = 'true_positive',
+    _: Dict[str, Any] = Depends(require_auth),
+) -> List[Dict[str, Any]]:
+    if triage not in _TRIAGE_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f'Invalid triage filter: {triage}')
     safe_limit = max(1, min(limit, 1000))
-    return fetch_events(limit=safe_limit)
+    return fetch_events(limit=safe_limit, triage=triage)
 
 
 @app.get('/stats')
@@ -179,6 +192,36 @@ def get_event(event_id: int, _: Dict[str, Any] = Depends(require_auth)) -> Dict[
     if not event:
         raise HTTPException(status_code=404, detail='Event not found')
     return event
+
+
+@app.put('/event/{event_id}/triage')
+def put_event_triage(
+    event_id: int,
+    payload: Dict[str, str],
+    _: Dict[str, Any] = Depends(require_auth),
+) -> Dict[str, Any]:
+    status = (payload or {}).get('status') or ''
+    if status not in VALID_TRIAGE_STATUSES:
+        raise HTTPException(status_code=400, detail=f'Invalid triage status: {status}')
+    event = set_event_triage(event_id, status)
+    if not event:
+        raise HTTPException(status_code=404, detail='Event not found')
+    return event
+
+
+@app.put('/ip/{ip}/triage')
+def put_ip_triage(
+    ip: str,
+    payload: Dict[str, str],
+    _: Dict[str, Any] = Depends(require_auth),
+) -> Dict[str, Any]:
+    status = (payload or {}).get('status') or ''
+    if status not in VALID_TRIAGE_STATUSES:
+        raise HTTPException(status_code=400, detail=f'Invalid triage status: {status}')
+    updated = set_ip_triage(ip, status)
+    if updated == 0:
+        raise HTTPException(status_code=404, detail='IP not found')
+    return {'status': 'ok', 'ip': ip, 'triage_status': status, 'updated': updated}
 
 
 @app.get('/event/{event_id}/context')

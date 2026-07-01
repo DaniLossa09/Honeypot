@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS events (
     mitre_subtechnique TEXT,
     mitre_confidence TEXT,
     raw_event_json TEXT,
+    triage_status TEXT NOT NULL DEFAULT 'true_positive',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -92,7 +93,33 @@ _EVENT_MIGRATIONS = {
     'ai_explanation': 'TEXT',
     'ai_attacker_profile': 'TEXT',
     'ai_defense': 'TEXT',
+    'triage_status': "TEXT NOT NULL DEFAULT 'true_positive'",
 }
+
+# Triage: ogni incidente nasce 'true_positive' (default colonna). L'analista puo
+# derubricarlo a 'false_positive' o 'authorized_activity' dalla dashboard; in
+# quel caso sparisce da elenco/conteggi/mappa principali ma resta consultabile
+# tramite il filtro 'triaged_out' (nessuna riga viene mai cancellata dal triage).
+TRUE_POSITIVE = 'true_positive'
+FALSE_POSITIVE = 'false_positive'
+AUTHORIZED_ACTIVITY = 'authorized_activity'
+VALID_TRIAGE_STATUSES = {TRUE_POSITIVE, FALSE_POSITIVE, AUTHORIZED_ACTIVITY}
+_TRIAGE_OUT_STATUSES = (FALSE_POSITIVE, AUTHORIZED_ACTIVITY)
+
+
+def _triage_where(triage: Optional[str]) -> tuple[str, list]:
+    """Traduce il filtro triage in clausola SQL + parametri.
+
+    None/'all' = nessun filtro; 'triaged_out' = solo cio che e' stato
+    derubricato; altrimenti deve essere uno status esatto.
+    """
+    if triage is None or triage == 'all':
+        return '', []
+    if triage == 'triaged_out':
+        return 'triage_status IN (?, ?)', list(_TRIAGE_OUT_STATUSES)
+    if triage not in VALID_TRIAGE_STATUSES:
+        raise ValueError(f'Invalid triage filter: {triage}')
+    return 'triage_status = ?', [triage]
 
 
 def _migrate_events(conn: sqlite3.Connection) -> None:
@@ -106,6 +133,10 @@ def init_db() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(SCHEMA)
         _migrate_events(conn)
+        # Dopo la migrazione la colonna triage_status esiste sempre (fresh DB o
+        # ALTER TABLE): l'indice va creato qui, non nello SCHEMA, altrimenti su
+        # un DB esistente fallirebbe (colonna non ancora aggiunta a quel punto).
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_events_triage_status ON events(triage_status)')
         conn.commit()
 
 
@@ -360,13 +391,35 @@ def _enrich_event_risk(event: Dict[str, Any], raw_events: Optional[List[Dict[str
     return enriched
 
 
-def fetch_events(limit: int = 200) -> List[Dict[str, Any]]:
+def fetch_events(limit: int = 200, triage: Optional[str] = TRUE_POSITIVE) -> List[Dict[str, Any]]:
+    where_sql, params = _triage_where(triage)
+    query = 'SELECT * FROM events'
+    if where_sql:
+        query += f' WHERE {where_sql}'
+    query += ' ORDER BY datetime(timestamp) DESC, id DESC LIMIT ?'
     with get_conn() as conn:
-        rows = conn.execute(
-            'SELECT * FROM events ORDER BY datetime(timestamp) DESC, id DESC LIMIT ?',
-            (limit,)
-        ).fetchall()
+        rows = conn.execute(query, (*params, limit)).fetchall()
     return [_enrich_event_risk(dict(r)) for r in rows]
+
+
+def set_event_triage(event_id: int, status: str) -> Optional[Dict[str, Any]]:
+    if status not in VALID_TRIAGE_STATUSES:
+        raise ValueError(f'Invalid triage status: {status}')
+    with get_conn() as conn:
+        cur = conn.execute('UPDATE events SET triage_status = ? WHERE id = ?', (status, event_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            return None
+    return fetch_event_by_id(event_id)
+
+
+def set_ip_triage(ip: str, status: str) -> int:
+    if status not in VALID_TRIAGE_STATUSES:
+        raise ValueError(f'Invalid triage status: {status}')
+    with get_conn() as conn:
+        cur = conn.execute('UPDATE events SET triage_status = ? WHERE ip = ?', (status, ip))
+        conn.commit()
+        return cur.rowcount
 
 
 def fetch_event_by_id(event_id: int) -> Optional[Dict[str, Any]]:
@@ -828,16 +881,19 @@ def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
     }
 
 
-def fetch_stats() -> Dict[str, Any]:
+def fetch_stats(triage: Optional[str] = TRUE_POSITIVE) -> Dict[str, Any]:
+    where_sql, params = _triage_where(triage)
+    where_clause = f'WHERE {where_sql}' if where_sql else ''
     with get_conn() as conn:
-        row = conn.execute('''
-            SELECT 
+        row = conn.execute(f'''
+            SELECT
               COUNT(*) as total,
               SUM(CASE WHEN danger_level = 'Alto' THEN 1 ELSE 0 END) as high,
               SUM(CASE WHEN danger_level = 'Medio' THEN 1 ELSE 0 END) as medium,
               COUNT(DISTINCT CASE WHEN country NOT IN ('Local', 'Unknown') THEN country END) as countries
             FROM events
-        ''').fetchone()
+            {where_clause}
+        ''', params).fetchone()
     return {
         'total': row['total'] or 0,
         'high': row['high'] or 0,
@@ -846,29 +902,34 @@ def fetch_stats() -> Dict[str, Any]:
     }
 
 
-def fetch_attack_distribution() -> List[Dict[str, Any]]:
+def fetch_attack_distribution(triage: Optional[str] = TRUE_POSITIVE) -> List[Dict[str, Any]]:
+    where_sql, params = _triage_where(triage)
+    where_clause = f'WHERE {where_sql}' if where_sql else ''
     with get_conn() as conn:
-        rows = conn.execute('''
+        rows = conn.execute(f'''
             SELECT attack_type, COUNT(*) AS count
             FROM events
+            {where_clause}
             GROUP BY attack_type
             ORDER BY count DESC, attack_type ASC
-        ''').fetchall()
+        ''', params).fetchall()
     return [dict(r) for r in rows]
 
 
-def fetch_map_points() -> List[Dict[str, Any]]:
+def fetch_map_points(triage: Optional[str] = TRUE_POSITIVE) -> List[Dict[str, Any]]:
+    where_sql, params = _triage_where(triage)
+    extra_where = f' AND {where_sql}' if where_sql else ''
     with get_conn() as conn:
-        rows = conn.execute('''
-            SELECT 
+        rows = conn.execute(f'''
+            SELECT
               lat, lon, country, city, attack_type,
               MIN(ip) as sample_ip,
               MIN(service) as sample_service,
               MAX(danger_level) as danger_level,
               COUNT(*) as count
             FROM events
-            WHERE lat IS NOT NULL AND lon IS NOT NULL
+            WHERE lat IS NOT NULL AND lon IS NOT NULL{extra_where}
             GROUP BY lat, lon, country, city, attack_type
             ORDER BY count DESC
-        ''').fetchall()
+        ''', params).fetchall()
     return [dict(r) for r in rows]

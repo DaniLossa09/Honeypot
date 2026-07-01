@@ -981,6 +981,79 @@
     color: #fff;
   }
 
+  .triage-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .triage-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .triage-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+  }
+
+  .triage-btn:hover:not(:disabled) { border-color: var(--accent2); color: var(--accent2); }
+  .triage-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+  .triage-btn.active-true_positive { border-color: var(--safe); color: var(--safe); background: rgba(0,255,136,0.08); }
+  .triage-btn.active-false_positive { border-color: var(--muted); color: var(--text); background: rgba(255,255,255,0.06); }
+  .triage-btn.active-authorized_activity { border-color: var(--accent2); color: var(--accent2); background: rgba(0,170,255,0.08); }
+
+  .triage-bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .triage-bulk select {
+    background: #161b22;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .triage-review-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(26,35,50,0.5);
+    cursor: pointer;
+  }
+
+  .triage-review-row:hover { background: rgba(0,255,136,0.03); }
+
+  .triage-review-main { font-size: 13px; }
+  .triage-review-main strong { color: var(--text); }
+  .triage-review-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
   .settings-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1576,6 +1649,7 @@
         <button class="filter-btn" onclick="filterEvents('Medio', this)">🟡 MEDIO</button>
         <button class="filter-btn" onclick="filterEvents('Basso', this)">🟢 BASSO</button>
         <span class="filter-result-count" id="filterResultCount">0 / 0</span>
+        <button class="filter-btn" id="triageReviewBtn" onclick="openTriageReview()">🗂 REVISIONA CLASSIFICATI</button>
         <button class="reset-btn" id="resetBtn" onclick="resetAttacks()">RESET ATTACCHI</button>
       </div>
     </div>
@@ -1833,6 +1907,21 @@
     </div>
     <div class="modal-body">
       <div id="ipModalContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REVISIONE CLASSIFICATI (falsi positivi / attivita autorizzate) -->
+<div class="modal-overlay" id="triageModalOverlay" onclick="closeTriageModal(event)">
+  <div class="modal wide" id="triageModal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-attack-type">🗂 Eventi classificati (non conteggiati)</div>
+      </div>
+      <button class="modal-close" onclick="closeTriageModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="triageModalContent"></div>
     </div>
   </div>
 </div>
@@ -2689,6 +2778,17 @@ async function openIpDetail(ip, event) {
         <button class="export-btn" onclick="downloadReport('/ip/${encodeURIComponent(detail.ip)}/export?format=html', 'ip-${escapeHtml(detail.ip)}.html')">ESPORTA HTML</button>
         <button class="export-btn" onclick="downloadReport('/ip/${encodeURIComponent(detail.ip)}/export?format=json', 'ip-${escapeHtml(detail.ip)}.json')">ESPORTA JSON</button>
       </div>
+      <div class="triage-section">
+        <span class="triage-label">Marca tutti gli eventi di questo IP come:</span>
+        <div class="triage-bulk">
+          <select id="ipTriageSelect">
+            <option value="true_positive">✅ Vero Positivo</option>
+            <option value="false_positive">❌ Falso Positivo</option>
+            <option value="authorized_activity">🛡 Attività Autorizzata</option>
+          </select>
+          <button class="export-btn" onclick="applyIpTriage('${escapeHtml(detail.ip)}')">APPLICA</button>
+        </div>
+      </div>
 
       <div class="ip-summary-grid">
         <div class="ip-summary-card">
@@ -3005,10 +3105,86 @@ function renderIncidentTimeline(items) {
   `).join('');
 }
 
+const TRIAGE_LABELS = {
+  true_positive: '✅ Vero Positivo',
+  false_positive: '❌ Falso Positivo',
+  authorized_activity: '🛡 Attività Autorizzata',
+};
+
+function renderTriageControl(eventId, currentStatus) {
+  const status = currentStatus || 'true_positive';
+  return `
+    <div class="triage-section">
+      <span class="triage-label">Classificazione:</span>
+      ${Object.entries(TRIAGE_LABELS).map(([value, label]) => `
+        <button class="triage-btn ${status === value ? 'active-' + value : ''}"
+          ${status === value ? 'disabled' : ''}
+          onclick="setEventTriage(${eventId}, '${value}')">${label}</button>
+      `).join('')}
+    </div>`;
+}
+
+async function setEventTriage(eventId, status) {
+  try {
+    await putJson(`/event/${eventId}/triage`, { status });
+    await openModal(eventId);
+    await refreshDashboard();
+  } catch (err) {
+    console.error('Triage update failed:', err);
+    window.alert('Impossibile aggiornare la classificazione.');
+  }
+}
+
+async function applyIpTriage(ip) {
+  const select = document.getElementById('ipTriageSelect');
+  const status = select ? select.value : 'true_positive';
+  try {
+    await putJson(`/ip/${encodeURIComponent(ip)}/triage`, { status });
+    await openIpDetail(ip);
+    await refreshDashboard();
+  } catch (err) {
+    console.error('Bulk triage update failed:', err);
+    window.alert('Impossibile aggiornare la classificazione per questo IP.');
+  }
+}
+
+async function openTriageReview() {
+  const content = document.getElementById('triageModalContent');
+  content.innerHTML = '<div class="empty">Caricamento...</div>';
+  document.getElementById('triageModalOverlay').classList.add('open');
+  try {
+    const items = await fetchJson('/events?limit=500&triage=triaged_out');
+    if (!items.length) {
+      content.innerHTML = '<div class="empty">Nessun evento classificato come falso positivo o attivita autorizzata.</div>';
+      return;
+    }
+    content.innerHTML = items.map(ev => `
+      <div class="triage-review-row" onclick="closeTriageModalDirect(); openModal(${Number(ev.id) || 0});">
+        <div class="triage-review-main">
+          <strong>${escapeHtml(ev.attack_type || 'Unknown')}</strong> · ${escapeHtml(ev.ip || 'n/d')} · ${escapeHtml((ev.service || 'unknown').toUpperCase())}
+          <div class="triage-review-meta">${formatTimestamp(ev.timestamp)} — ${escapeHtml(TRIAGE_LABELS[ev.triage_status] || ev.triage_status || '')}</div>
+        </div>
+        <span class="triage-btn">Apri ›</span>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Triage review load failed:', err);
+    content.innerHTML = '<div class="empty">Errore nel caricamento.</div>';
+  }
+}
+
+function closeTriageModal(e) {
+  if (e.target === document.getElementById('triageModalOverlay')) closeTriageModalDirect();
+}
+function closeTriageModalDirect() {
+  document.getElementById('triageModalOverlay').classList.remove('open');
+}
+
 function renderIncidentDetail(detail) {
   const evidence = detail.evidence || {};
   const eventId = Number(detail.event.id) || 0;
   return `
+    ${renderTriageControl(eventId, detail.event.triage_status)}
     <div class="export-actions">
       <button class="export-btn" onclick="downloadReport('/incident/${eventId}/export?format=html', 'incident-${eventId}.html')">ESPORTA HTML</button>
       <button class="export-btn" onclick="downloadReport('/incident/${eventId}/export?format=json', 'incident-${eventId}.json')">ESPORTA JSON</button>
@@ -3101,6 +3277,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeModalDirect();
     closeIpModalDirect();
+    closeTriageModalDirect();
   }
 });
 
