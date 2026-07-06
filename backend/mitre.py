@@ -122,8 +122,8 @@ def map_attack_to_mitre(attack_type: Optional[str], record: Dict[str, Any]) -> D
 
     if attack_type == "Credential Attack":
         # Brute force online verso un servizio esposto: il default coerente e
-        # Password Guessing. Spraying/Stuffing non sono distinguibili dal singolo
-        # evento -> confidenza Medio sulla sub.
+        # Password Guessing (Spraying/Stuffing non sono distinguibili dal
+        # singolo evento, quindi non si usano mai come sub).
         return _entry("TA0006", "T1110", "T1110.001", "Alto")
 
     if attack_type == "Unauthorized Login":

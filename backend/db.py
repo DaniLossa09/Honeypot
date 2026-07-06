@@ -131,12 +131,19 @@ def _migrate_events(conn: sqlite3.Connection) -> None:
 
 def init_db() -> None:
     with sqlite3.connect(DB_PATH) as conn:
+        # WAL: i lettori (endpoint API) non vengono bloccati dalle scritture del
+        # processor. Persistente nel file DB, va impostato una sola volta.
+        conn.execute('PRAGMA journal_mode=WAL')
         conn.executescript(SCHEMA)
         _migrate_events(conn)
         # Dopo la migrazione la colonna triage_status esiste sempre (fresh DB o
         # ALTER TABLE): l'indice va creato qui, non nello SCHEMA, altrimenti su
         # un DB esistente fallirebbe (colonna non ancora aggiunta a quel punto).
         conn.execute('CREATE INDEX IF NOT EXISTS idx_events_triage_status ON events(triage_status)')
+        # Indice composito per la query piu frequente (fetch_events dal polling
+        # della dashboard): filtro triage + ORDER BY timestamp DESC, id DESC
+        # risolti interamente dall'indice, senza TEMP B-TREE.
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_events_triage_ts ON events(triage_status, timestamp DESC, id DESC)')
         conn.commit()
 
 
@@ -150,7 +157,7 @@ def get_conn():
         conn.close()
 
 
-def insert_event(event: Dict[str, Any]) -> bool:
+def insert_event(event: Dict[str, Any], conn: Optional[sqlite3.Connection] = None) -> bool:
     sql = '''
     INSERT OR IGNORE INTO events (
         event_hash, timestamp, source, ip, port, service, raw_payload,
@@ -172,9 +179,13 @@ def insert_event(event: Dict[str, Any]) -> bool:
         event.get('ai_explanation'), event.get('ai_attacker_profile'), event.get('ai_defense'),
         json.dumps(event.get('raw_event', {}), ensure_ascii=False),
     )
-    with get_conn() as conn:
-        cur = conn.execute(sql, values)
-        conn.commit()
+    # Con una connessione esterna (batch del processor) niente commit qui:
+    # transazione e commit sono gestiti dal chiamante.
+    if conn is not None:
+        return conn.execute(sql, values).rowcount > 0
+    with get_conn() as own:
+        cur = own.execute(sql, values)
+        own.commit()
         return cur.rowcount > 0
 
 
@@ -199,7 +210,7 @@ def _raw_hash(record: Dict[str, Any]) -> str:
     return sha256_text(raw)
 
 
-def insert_raw_event(record: Dict[str, Any]) -> bool:
+def insert_raw_event(record: Dict[str, Any], conn: Optional[sqlite3.Connection] = None) -> bool:
     raw_event = _raw_dict(record)
     sql = '''
     INSERT OR IGNORE INTO raw_events (
@@ -215,9 +226,11 @@ def insert_raw_event(record: Dict[str, Any]) -> bool:
         record.get('path'), record.get('uri'), record.get('user_agent'), _raw_session(raw_event),
         record.get('raw_payload'), json.dumps(raw_event, ensure_ascii=False),
     )
-    with get_conn() as conn:
-        cur = conn.execute(sql, values)
-        conn.commit()
+    if conn is not None:
+        return conn.execute(sql, values).rowcount > 0
+    with get_conn() as own:
+        cur = own.execute(sql, values)
+        own.commit()
         return cur.rowcount > 0
 
 
@@ -396,7 +409,10 @@ def fetch_events(limit: int = 200, triage: Optional[str] = TRUE_POSITIVE) -> Lis
     query = 'SELECT * FROM events'
     if where_sql:
         query += f' WHERE {where_sql}'
-    query += ' ORDER BY datetime(timestamp) DESC, id DESC LIMIT ?'
+    # I timestamp sono ISO-8601 normalizzati dai parser: l'ordinamento come
+    # stringa equivale a quello cronologico e usa idx_events_timestamp
+    # (datetime(timestamp) forzerebbe un sort con TEMP B-TREE su ogni riga).
+    query += ' ORDER BY timestamp DESC, id DESC LIMIT ?'
     with get_conn() as conn:
         rows = conn.execute(query, (*params, limit)).fetchall()
     return [_enrich_event_risk(dict(r)) for r in rows]
@@ -485,7 +501,7 @@ def fetch_event_context(event_id: int, limit: int = 80) -> Optional[Dict[str, An
                 '''
                 SELECT * FROM raw_events
                 WHERE source = ? AND ip = ? AND service = ? AND session = ?
-                ORDER BY datetime(timestamp) ASC, id ASC
+                ORDER BY timestamp ASC, id ASC
                 LIMIT ?
                 ''',
                 (event.get('source'), event.get('ip'), event.get('service'), str(session), limit),
@@ -495,7 +511,7 @@ def fetch_event_context(event_id: int, limit: int = 80) -> Optional[Dict[str, An
                 '''
                 SELECT * FROM raw_events
                 WHERE source = ? AND ip = ? AND service = ?
-                ORDER BY datetime(timestamp) ASC, id ASC
+                ORDER BY timestamp ASC, id ASC
                 LIMIT ?
                 ''',
                 (event.get('source'), event.get('ip'), event.get('service'), max(limit * 4, limit)),
@@ -790,7 +806,7 @@ def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
             '''
             SELECT * FROM events
             WHERE ip = ?
-            ORDER BY datetime(timestamp) ASC, id ASC
+            ORDER BY timestamp ASC, id ASC
             LIMIT ?
             ''',
             (ip, limit),
@@ -799,7 +815,7 @@ def fetch_ip_detail(ip: str, limit: int = 200) -> Optional[Dict[str, Any]]:
             '''
             SELECT * FROM raw_events
             WHERE ip = ?
-            ORDER BY datetime(timestamp) ASC, id ASC
+            ORDER BY timestamp ASC, id ASC
             LIMIT ?
             ''',
             (ip, max(limit * 3, limit)),
@@ -925,7 +941,9 @@ def fetch_map_points(triage: Optional[str] = TRUE_POSITIVE) -> List[Dict[str, An
               lat, lon, country, city, attack_type,
               MIN(ip) as sample_ip,
               MIN(service) as sample_service,
-              MAX(danger_level) as danger_level,
+              CASE MAX(CASE danger_level WHEN 'Alto' THEN 3 WHEN 'Medio' THEN 2 WHEN 'Basso' THEN 1 ELSE 0 END)
+                WHEN 3 THEN 'Alto' WHEN 2 THEN 'Medio' WHEN 1 THEN 'Basso' ELSE NULL
+              END as danger_level,
               COUNT(*) as count
             FROM events
             WHERE lat IS NOT NULL AND lon IS NOT NULL{extra_where}

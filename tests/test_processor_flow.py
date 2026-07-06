@@ -399,10 +399,10 @@ class ProcessorFlowTest(unittest.TestCase):
 
         real_insert = self.db.insert_event
 
-        def flaky_insert(event):
+        def flaky_insert(event, conn=None):
             if event.get("ip") == "192.0.2.11":
                 raise RuntimeError("boom")
-            return real_insert(event)
+            return real_insert(event, conn=conn)
 
         with patch.object(self.processor_module, "insert_event", flaky_insert):
             with self.assertRaises(RuntimeError):

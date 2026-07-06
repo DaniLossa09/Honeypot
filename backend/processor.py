@@ -5,8 +5,8 @@ from typing import Dict, List
 
 from .ai_analyst import analyze_event
 from .classifier import classify_attack, classify_signal
-from .config import EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
-from .db import fetch_events, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
+from .config import ATTACK_SETTINGS_PATH, EVENTS_EXPORT_PATH, LOG_PATHS, OFFSETS_PATH
+from .db import fetch_events, get_conn, init_db, insert_event, insert_raw_event, reconcile_events, reset_events
 from .explainer import explain_attack
 from .geolocation import GeoResolver
 from .mitre import map_attack_to_mitre
@@ -23,14 +23,32 @@ class Processor:
     def __init__(self):
         init_db()
         self.signal_history: Dict[str, List[float]] = {}
+        # Timestamp evento piu recente visto dai segnali: base tempi per il
+        # pruning (i log possono avere timestamp storici, il wall clock no).
+        self._last_signal_ts = 0.0
         self.attack_settings = load_attack_settings()
+        self._settings_mtime = self._settings_file_mtime()
         reconcile_events(self._reconcile_attack_type, explain_attack, self._event_hash)
         self.geo = GeoResolver()
         self.offsets = self._load_offsets()
 
     def reload_attack_settings(self) -> Dict:
         self.attack_settings = load_attack_settings()
+        self._settings_mtime = self._settings_file_mtime()
         return self.attack_settings
+
+    @staticmethod
+    def _settings_file_mtime() -> float | None:
+        try:
+            return ATTACK_SETTINGS_PATH.stat().st_mtime
+        except OSError:
+            return None
+
+    def _reload_settings_if_changed(self) -> None:
+        # Rilettura solo se il file e cambiato (mtime): evita parse+validazione
+        # JSON a ogni ciclo di polling. PUT /settings chiama reload esplicito.
+        if self._settings_file_mtime() != self._settings_mtime:
+            self.reload_attack_settings()
 
     def _reconcile_attack_type(self, record: Dict) -> str | None:
         attack_type = classify_attack(record)
@@ -96,7 +114,26 @@ class Processor:
         history = [ts for ts in self.signal_history.get(key, []) if ts >= cutoff]
         history.append(now)
         self.signal_history[key] = history
+        self._last_signal_ts = max(self._last_signal_ts, now)
         return len(history) >= threshold
+
+    def _prune_signal_history(self) -> None:
+        """Rimuove le chiavi con soli timestamp fuori finestra.
+
+        Senza pruning gli IP mai piu rivisti restano in memoria per sempre.
+        Il cutoff usa l'ultimo timestamp evento visto (non il wall clock):
+        i log riprocessati possono avere date storiche.
+        """
+        if not self._last_signal_ts:
+            return
+        window_seconds = int(self.attack_settings.get('credential_window_seconds') or self.CREDENTIAL_WINDOW_SECONDS)
+        cutoff = self._last_signal_ts - window_seconds
+        for key in list(self.signal_history):
+            kept = [ts for ts in self.signal_history[key] if ts >= cutoff]
+            if kept:
+                self.signal_history[key] = kept
+            else:
+                del self.signal_history[key]
 
     def _source_enabled(self, source: str) -> bool:
         enabled_sources = self.attack_settings.get('enabled_sources') or {}
@@ -129,39 +166,65 @@ class Processor:
         return sha256_text(raw)
 
     def process_once(self) -> int:
-        self.reload_attack_settings()
+        self._reload_settings_if_changed()
         inserted_count = 0
+        offsets_changed = False
         for source, path in LOG_PATHS.items():
             if not self._source_enabled(source):
                 continue
             current_offset = self.offsets.get(source, 0)
             records, new_offset = read_incremental(source, path, current_offset)
-            for record in records:
-                insert_raw_event(record)
-                attack_type = classify_attack(record)
-                if attack_type and not self._attack_enabled(attack_type):
-                    attack_type = None
-                if not attack_type:
-                    signal_type = classify_signal(record)
-                    if signal_type and self._signal_threshold_met(record, signal_type):
-                        attack_type = signal_type
-                if not attack_type:
-                    continue
-                record['attack_type'] = attack_type
+
+            # Fase 1 - raw + classificazione: una sola transazione per blocco
+            # (un commit = un fsync, non uno per riga: conta molto su SD).
+            candidates: List[Dict] = []
+            with get_conn() as conn:
+                for record in records:
+                    insert_raw_event(record, conn=conn)
+                    attack_type = classify_attack(record)
+                    if attack_type and not self._attack_enabled(attack_type):
+                        attack_type = None
+                    if not attack_type:
+                        signal_type = classify_signal(record)
+                        if signal_type and self._signal_threshold_met(record, signal_type):
+                            attack_type = signal_type
+                    if not attack_type:
+                        continue
+                    record['attack_type'] = attack_type
+                    candidates.append(record)
+                conn.commit()
+
+            # Fase 2 - arricchimento (geo/AI = rete, anche lenti): fuori da
+            # qualsiasi transazione per non tenere lock sul DB.
+            for record in candidates:
                 record.update(explain_attack(record['attack_type']))
-                record.update(map_attack_to_mitre(attack_type, record))
+                record.update(map_attack_to_mitre(record['attack_type'], record))
                 record.update(self.geo.resolve(record.get('ip')))
                 record.update(analyze_event(record))
                 record['event_hash'] = self._event_hash(record)
-                if insert_event(record):
-                    inserted_count += 1
-            # Avanza l'offset solo dopo aver processato l'intero blocco: se il
-            # ciclo sopra lancia (geo/AI/insert), l'offset resta indietro e le
-            # righe non inserite vengono riprocessate al giro dopo. Gli insert
-            # sono idempotenti (event_hash), quindi il replay non crea duplicati.
+
+            # Fase 3 - insert incidenti, una transazione per blocco.
+            if candidates:
+                with get_conn() as conn:
+                    for record in candidates:
+                        if insert_event(record, conn=conn):
+                            inserted_count += 1
+                    conn.commit()
+
+            # Avanza l'offset solo dopo aver processato l'intero blocco: se una
+            # fase lancia (geo/AI/insert), l'offset resta indietro e le righe
+            # non inserite vengono riprocessate al giro dopo. Gli insert sono
+            # idempotenti (event_hash / raw_hash), il replay non crea duplicati.
+            if new_offset != current_offset:
+                offsets_changed = True
             self.offsets[source] = new_offset
-        self._save_offsets()
-        self.export_events_json()
+
+        self._prune_signal_history()
+        # Niente righe nuove = niente scritture: offsets.json e l'export JSON
+        # venivano riscritti a ogni polling anche a vuoto (usura SD inutile).
+        if offsets_changed or inserted_count:
+            self._save_offsets()
+            self.export_events_json()
         return inserted_count
 
     def reset_attacks(self) -> Dict[str, int]:

@@ -22,7 +22,9 @@ _load_dotenv(BASE_DIR / '.env')
 
 DATA_DIR = BASE_DIR / 'data'
 CACHE_DIR = DATA_DIR / 'cache'
-EXPORT_DIR = DATA_DIR / 'exports'
+# Override-abile via env come gli altri path: i test dei report possono cosi
+# scrivere in una dir temporanea invece che nell'albero reale data/exports/.
+EXPORT_DIR = Path(os.getenv('HPX_EXPORT_DIR', str(DATA_DIR / 'exports')))
 STATE_DIR = DATA_DIR / 'state'
 CONFIG_DIR = BASE_DIR / 'config'
 
