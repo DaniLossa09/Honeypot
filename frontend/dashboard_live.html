@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Configurabile dal deployment con un tile server OSM self-hosted, senza segreti. -->
+<meta name="hpx-tile-url" content="https://tile.openstreetmap.org/{z}/{x}/{y}.png">
+<!-- Posizione configurata del PC HoneypotX: usata esclusivamente per gli eventi LAN. -->
+<meta name="hpx-honeypot-location" content='{"lat":45.649,"lon":9.602,"city":"Dalmine (circa)"}'>
 <title>HoneypotX — Cyber Threat Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -484,6 +488,9 @@
   }
 
   .leaflet-container { background: #0a0e14 !important; }
+
+  .hpx-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.8) saturate(0.65); }
+  .hpx-map-status { background: #0d1117; color: #ffaa00; padding: 6px 10px; max-width: 240px; }
 
   /* ── GRAFICO DONUT ── */
   .chart-wrap {
@@ -1589,9 +1596,9 @@
 
     <div class="stats-row section-anchor" id="overview">
       <div class="stat-card danger">
-        <div class="stat-label">⚡ Attacchi Totali</div>
+        <div class="stat-label">⚡ Incidenti Totali</div>
         <div class="stat-value danger" id="stat-total">0</div>
-        <div class="stat-sub">eventi rilevati</div>
+        <div class="stat-sub">incidenti correlati · totale globale</div>
       </div>
       <div class="stat-card danger">
         <div class="stat-label">🔴 Pericolo Alto</div>
@@ -1840,6 +1847,7 @@
         <div class="settings-title">Sorgenti abilitate</div>
         <div class="settings-help">Disabilitare una sorgente evita che i nuovi log di quel protocollo generino incidenti.</div>
         <div class="toggle-grid">
+          <div class="toggle-row"><label for="settingSourcePortscan">Port scan del server</label><input id="settingSourcePortscan" type="checkbox"></div>
           <div class="toggle-row"><label for="settingSourceCowrie">SSH/Telnet Cowrie</label><input id="settingSourceCowrie" type="checkbox"></div>
           <div class="toggle-row"><label for="settingSourceOpencanary">HTTP/HTTPS OpenCanary</label><input id="settingSourceOpencanary" type="checkbox"></div>
           <div class="toggle-row"><label for="settingSourceFtp">FTP</label><input id="settingSourceFtp" type="checkbox"></div>
@@ -1962,6 +1970,7 @@ let analysisMarkerLayer;
 let mapHasAutoFit = false;
 let analysisMapHasAutoFit = false;
 let allEvents = [];
+let globalStats = null;
 let refreshTimer;
 let authToken = localStorage.getItem('honeypotx_auth_token') || '';
 let filterOptionsSignature = '';
@@ -2019,7 +2028,7 @@ function renderMitreBadge(ev) {
   const tactic = ev.mitre_tactic_name ? `${ev.mitre_tactic_name} · ` : '';
   const tip = `${tactic}${id}${name ? ' – ' + name : ''}${conf ? ' (confidenza ' + conf + ')' : ''}`;
   const uncertain = ev.mitre_uncertain ? '<span class="mitre-uncertain">≈ incerto</span>' : '';
-  return `<span class="mitre-badge ${confClass}" title="${escapeHtml(tip)}">🎯 ${escapeHtml(id)} ${uncertain}</span>`;
+  return `<span class="mitre-badge ${confClass}" title="${escapeHtml(tip)}">🎯 ${ev.mitre_domain === 'ics' ? 'ICS · ' : ''}${escapeHtml(id)} ${uncertain}</span>`;
 }
 
 // Badge delle technique di Discovery (TA0007) rilevate dai comandi della sessione.
@@ -2219,6 +2228,7 @@ function fillAttackSettings(settings) {
   document.getElementById('settingIncidentBucket').value = settings.incident_bucket_seconds ?? 900;
 
   const sources = settings.enabled_sources || {};
+  setChecked('settingSourcePortscan', sources.portscan !== false);
   setChecked('settingSourceCowrie', sources.cowrie !== false);
   setChecked('settingSourceOpencanary', sources.opencanary !== false);
   setChecked('settingSourceFtp', sources.ftp !== false);
@@ -2243,6 +2253,7 @@ function readAttackSettingsForm() {
     incident_bucket_seconds: Number(document.getElementById('settingIncidentBucket').value || 900),
     post_login_dedupe_by_session: getChecked('settingPostLoginDedupe'),
     enabled_sources: {
+      portscan: getChecked('settingSourcePortscan'),
       cowrie: getChecked('settingSourceCowrie'),
       opencanary: getChecked('settingSourceOpencanary'),
       ftp: getChecked('settingSourceFtp'),
@@ -2293,7 +2304,9 @@ async function refreshDashboard() {
   ]);
 
   if (statsResult.status === 'fulfilled') {
+    globalStats = statsResult.value;
   } else {
+    globalStats = null;
     console.error('Stats refresh failed:', statsResult.reason);
   }
 
@@ -2325,7 +2338,7 @@ async function refreshDashboard() {
 }
 
 function renderStats(stats) {
-  document.getElementById('stat-total').textContent = stats.total ?? 0;
+  document.getElementById('stat-total').textContent = stats.total ?? '—';
   document.getElementById('stat-high').textContent = stats.high ?? 0;
   document.getElementById('stat-medium').textContent = stats.medium ?? 0;
   document.getElementById('stat-countries').textContent = stats.countries ?? 0;
@@ -2474,34 +2487,40 @@ function buildDistribution(events) {
     .sort((a, b) => b.count - a.count || a.attack_type.localeCompare(b.attack_type));
 }
 
-// Punto placeholder per gli attacchi locali (LAN): non hanno geo reale, ma li
-// mostriamo comunque su un marker fisso cosi la mappa non resta vuota in test.
-// Impostato sulla posizione approssimativa dell'honeypot (Bergamo, IT).
-const LOCAL_MAP_COORDS = [45.6983, 9.6773];
+// Gli IP pubblici richiedono coordinate GeoIP valide; la LAN usa la posizione configurata del PC.
+function hasMapCoordinates(point) {
+  return Number.isFinite(point.lat) && Number.isFinite(point.lon)
+    && Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180;
+}
+
+function getHoneypotLocation() {
+  try {
+    const setting = document.querySelector('meta[name="hpx-honeypot-location"]');
+    const location = JSON.parse(setting?.content || 'null');
+    if (!location || !hasMapCoordinates(location)) return null;
+    return { lat: location.lat, lon: location.lon,
+      city: typeof location.city === 'string' && location.city.trim()
+        ? location.city.trim() : 'Posizione honeypot' };
+  } catch {
+    return null;
+  }
+}
 
 function buildMapPoints(events) {
+  const honeypotLocation = getHoneypotLocation();
   const grouped = new Map();
   events.forEach(ev => {
-    let lat = ev.lat;
-    let lon = ev.lon;
-    let isLocal = false;
-    if (lat == null || lon == null) {
-      // Solo gli eventi 'Local' vengono forzati sul placeholder; gli 'Unknown'
-      // (geo fallita) restano non mappabili.
-      if ((ev.country || '') === 'Local') {
-        lat = LOCAL_MAP_COORDS[0];
-        lon = LOCAL_MAP_COORDS[1];
-        isLocal = true;
-      } else {
-        return;
-      }
-    }
+    const isLocal = ev.country === 'Local';
+    // Per la LAN mostriamo il PC HoneypotX, non la posizione dell'attaccante.
+    const location = isLocal ? honeypotLocation : ev;
+    if (!location || !hasMapCoordinates(location)) return;
+    const { lat, lon } = location;
     const key = [lat, lon, ev.country || '', ev.city || '', ev.attack_type || 'Unknown'].join('|');
     const current = grouped.get(key) || {
       lat,
       lon,
       country: ev.country,
-      city: ev.city,
+      city: isLocal ? location.city : ev.city,
       attack_type: ev.attack_type || 'Unknown',
       sample_ip: ev.ip,
       sample_service: ev.service,
@@ -2517,13 +2536,44 @@ function buildMapPoints(events) {
   return Array.from(grouped.values()).sort((a, b) => b.count - a.count);
 }
 
+// Un solo provider per entrambe le viste. Il browser gestisce la cache HTTP dei tile.
+function addMapTiles(targetMap) {
+  const tileUrl = document.querySelector('meta[name="hpx-tile-url"]').content;
+  targetMap.createPane('hpxTiles').classList.add('hpx-map-tiles');
+  const status = L.control({ position: 'bottomleft' });
+  const message = document.createElement('div');
+  message.className = 'hpx-map-status';
+  message.setAttribute('role', 'status');
+  message.hidden = true;
+  status.onAdd = () => message;
+  status.addTo(targetMap);
+  let failedTiles = 0;
+  const tiles = L.tileLayer(tileUrl, {
+    pane: 'hpxTiles',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+    referrerPolicy: 'strict-origin-when-cross-origin',
+  });
+  tiles.on('loading', () => { failedTiles = 0; });
+  tiles.on('tileerror', () => {
+    failedTiles += 1;
+    message.textContent = 'Cartografia non disponibile. Gli eventi restano consultabili.';
+    message.hidden = false;
+  });
+  tiles.on('load', () => { message.hidden = failedTiles === 0; });
+  tiles.addTo(targetMap);
+}
+
+function canInitMap(id) {
+  if (typeof L !== 'undefined') return true;
+  document.getElementById(id).textContent = 'Mappa non disponibile: caricamento Leaflet non riuscito.';
+  return false;
+}
+
 function initMap() {
-  if (map) return;
+  if (map || !canInitMap('map')) return;
   map = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    maxZoom: 18
-  }).addTo(map);
+  addMapTiles(map);
   markerLayer = L.layerGroup().addTo(map);
   map.on('zoomstart movestart', () => {
     mapHasAutoFit = true;
@@ -2531,12 +2581,9 @@ function initMap() {
 }
 
 function initAnalysisMap() {
-  if (analysisMap) return;
+  if (analysisMap || !canInitMap('analysisMap')) return;
   analysisMap = L.map('analysisMap', { zoomControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    maxZoom: 18
-  }).addTo(analysisMap);
+  addMapTiles(analysisMap);
   analysisMarkerLayer = L.layerGroup().addTo(analysisMap);
   analysisMap.on('zoomstart movestart', () => {
     analysisMapHasAutoFit = true;
@@ -2549,13 +2596,9 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
 
   const bounds = [];
   points.forEach((point) => {
-    if (point.lat == null || point.lon == null) return;
+    if (!hasMapCoordinates(point)) return;
     const danger = point.danger_level || 'Basso';
-    // Attacchi locali (LAN) in azzurro; gli altri per livello di pericolo.
-    const color = point.is_local ? '#58a6ff'
-      : danger === 'Alto' ? '#ff3355'
-      : danger === 'Medio' ? '#ffaa00'
-      : '#00ff88';
+    const color = '#58a6ff';
     const size = Math.min(8 + (point.count || 1) * 4, 24);
     const icon = L.divIcon({
       html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; border:2px solid rgba(255,255,255,0.3); box-shadow:0 0 ${size}px ${color}88; animation:pulse-marker 2s ease-in-out infinite;"></div>`,
@@ -2563,13 +2606,13 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
     });
     const marker = L.marker([point.lat, point.lon], { icon }).bindPopup(`
       <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#c9d1d9; min-width:180px;">
-        <div style="color:#fff; font-size:14px; margin-bottom:6px;">${point.attack_type}</div>
-        ${point.is_local ? '<div style="color:#58a6ff;">🏠 Rete locale (LAN) — posizione approssimata</div>' : ''}
-        <div>🌐 ${point.sample_ip || 'n/d'}</div>
-        <div>📍 ${point.city || 'Unknown'}, ${point.country || 'Unknown'}</div>
-        <div>🔌 ${(point.sample_service || 'unknown').toUpperCase()}</div>
+        <div style="color:#fff; font-size:14px; margin-bottom:6px;">${escapeHtml(point.attack_type)}</div>
+        ${point.is_local ? '<div style="color:#58a6ff;">🏠 Rete locale (LAN) — posizione dell’honeypot</div>' : ''}
+        <div>🌐 ${escapeHtml(point.sample_ip || 'n/d')}</div>
+        <div>📍 ${escapeHtml(point.city || 'Unknown')}, ${escapeHtml(point.country || 'Unknown')}</div>
+        <div>🔌 ${escapeHtml((point.sample_service || 'unknown').toUpperCase())}</div>
         <div>📊 Eventi: ${point.count || 0}</div>
-        <div style="margin-top:6px; color:${color};">● ${danger.toUpperCase()}</div>
+        <div style="margin-top:6px; color:${color};">● ${escapeHtml(danger.toUpperCase())}</div>
       </div>
     `, { className: 'dark-popup' });
     targetLayer.addLayer(marker);
@@ -2579,7 +2622,7 @@ function renderMapInto(targetMap, targetLayer, points, shouldAutoFit) {
   if (bounds.length && shouldAutoFit) {
     const uniqueCoords = new Set(bounds.map(b => b.join(',')));
     if (uniqueCoords.size <= 1) {
-      // Un solo punto (es. solo traffico locale): vista mondiale centrata sul
+      // Un solo punto: vista mondiale centrata sul
       // pin, cosi si vede tutto il globo senza zoom eccessivo sul mare.
       targetMap.setView(bounds[0], 3);
     } else {
@@ -2933,8 +2976,8 @@ function applyCurrentFilter() {
   updateFilterOptions();
   const filters = getAdvancedFilters();
   const filtered = allEvents.filter(ev => eventMatchesFilters(ev, filters));
-  document.getElementById('filterResultCount').textContent = `${filtered.length} / ${allEvents.length}`;
-  renderStats(filteredStats(filtered));
+  document.getElementById('filterResultCount').textContent = `Vista: ${filtered.length} / ${allEvents.length} incidenti caricati (massimo 200)`;
+  renderStats(globalStats || { total: '—', high: '—', medium: '—', countries: '—' });
   renderOverviewInsights(filtered);
   renderAnalysisInsights(filtered);
   renderChart(buildDistribution(filtered));

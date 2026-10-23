@@ -27,6 +27,7 @@ TACTICS: Dict[str, str] = {
     "TA0007": "Discovery",
     "TA0008": "Lateral Movement",
     "TA0011": "Command and Control",
+    "TA0106": "Impair Process Control",
 }
 
 TECHNIQUES: Dict[str, str] = {
@@ -37,6 +38,7 @@ TECHNIQUES: Dict[str, str] = {
     "T1110": "Brute Force",
     "T1210": "Exploitation of Remote Services",
     "T1105": "Ingress Tool Transfer",
+    "T1692": "Unauthorized Message",
     # Discovery (TA0007)
     "T1082": "System Information Discovery",
     "T1033": "System Owner/User Discovery",
@@ -60,6 +62,7 @@ SUBTECHNIQUES: Dict[str, str] = {
     "T1110.001": "Password Guessing",
     "T1110.003": "Password Spraying",
     "T1110.004": "Credential Stuffing",
+    "T1692.001": "Command Message",
     # Discovery (TA0007)
     "T1087.001": "Local Account",
     "T1069.001": "Local Groups",
@@ -162,14 +165,18 @@ def map_attack_to_mitre(attack_type: Optional[str], record: Dict[str, Any]) -> D
         return _empty()
 
     if attack_type == "Database Attack":
-        # Query/comandi verso DB honeypot: exploitation generica di servizio esposto.
-        return _entry("TA0001", "T1190", None, "Medio")
+        # Una query, da sola, non dimostra exploitation.
+        return _empty()
 
     if attack_type == "SCADA Attack":
-        # Interazione con protocolli ICS/SCADA. T1210 e' il piu' vicino in
-        # ATT&CK Enterprise; i protocolli ICS hanno una matrice separata (ICS ATT&CK)
-        # che non e' inclusa qui -> confidenza Basso.
-        return _entry("TA0008", "T1210", None, "Basso")
+        # Sottoinsieme ICS verificato il 2026-10-20 sul catalogo ufficiale;
+        # T1692.001 versione oggetto 2.0, modifica 2026-10-13.
+        # Il comando osservato sul honeypot non prova un effetto fisico reale.
+        command = str(record.get('command') or '').upper()
+        if command in {'WRITE_SINGLE_COIL', 'WRITE_SINGLE_REGISTER', 'WRITE_MULTIPLE_COILS',
+                       'WRITE_MULTIPLE_REGISTERS', 'READ_WRITE_MULTIPLE_REGISTERS', 'WRITE_VAR'}:
+            return _entry('TA0106', 'T1692', 'T1692.001', 'Medio')
+        return _empty()
 
     # --- Mapping approssimati (Basso = "incerto"): nessuna technique ATT&CK
     # descrive esattamente questi attacchi, ma manteniamo un riferimento ----
@@ -207,6 +214,9 @@ def resolve_mitre(
     dashboard puo mostrare l'etichetta "incerto".
     """
     return {
+        "mitre_domain": "ics" if technique == "T1692" else ("enterprise" if technique else None),
+        "mitre_catalog_verified": "2026-10-20" if technique == "T1692" else None,
+        "mitre_object_version": "2.0" if subtechnique == "T1692.001" else None,
         "mitre_tactic": tactic,
         "mitre_tactic_name": TACTICS.get(tactic or ""),
         "mitre_technique": technique,

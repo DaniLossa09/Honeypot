@@ -2,12 +2,19 @@ import socket
 import threading
 import json
 import os
+import re
+import uuid
+import ipaddress
 from datetime import datetime, timezone
 from pathlib import Path
 
 LOG_PATH = "/opt/dionaea/var/log/dionaea/ftp.json"
 FAKE_ROOT = Path(os.getenv("HPX_FAKE_FTP_ROOT", "/opt/dionaea/fake_corp/ftp_root")).resolve()
-os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+
+MAX_COMMAND_BYTES = 8192
+LOG_LOCK = threading.Lock()
+DENIED_COMMANDS = {"PASV", "EPSV", "PORT", "EPRT", "LIST", "NLST", "MLSD",
+                   "RETR", "STOR", "STOU", "APPE", "REST"}
 
 BANNER = "220 FTP server ready\r\n"
 RESPONSES = {
@@ -21,17 +28,23 @@ RESPONSES = {
     "STOR": "550 Permission denied\r\n",
 }
 
-def log(ip, port, command, argument=""):
+def log(ip, port, command, argument="", *, session, username=None, local_addr):
+    if not isinstance(argument, str) or len(argument) > MAX_COMMAND_BYTES + 1:
+        raise ValueError('Invalid FTP argument')
+    if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,15}', command):
+        raise ValueError('Invalid FTP event')
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "src_ip": ip,
-        "src_port": port,
-        "command": command,
-        "argument": argument,
+        "src_ip": str(ipaddress.ip_address(ip)), "src_port": port,
+        "dst_ip": str(ipaddress.ip_address(local_addr[0])), "dst_port": local_addr[1],
+        "protocol": "ftp", "session": session,
+        "command": command, "argument": argument, "username": username,
+        "password": argument if command == 'PASS' else None,
     }
-    with open(LOG_PATH, "a") as f:
+    with LOG_LOCK, open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
-    print(f"[{entry['timestamp']}] {ip}:{port} → {command} {argument}", flush=True)
+    print(json.dumps(entry), flush=True)
+
 
 def resolve_fake_path(cwd, argument=""):
     requested = argument.strip() or cwd
@@ -82,42 +95,68 @@ def retrieve_fake_file(cwd, argument=""):
 def handle_client(conn, addr):
     ip, port = addr
     cwd = "/"
-    log(ip, port, "CONNECT")
+    session = uuid.uuid4().hex
+    username = None
+    local_addr = conn.getsockname()
+    def emit(command, argument=""):
+        log(ip, port, command, argument, session=session,
+            username=username, local_addr=local_addr)
+    conn.settimeout(60)
+    emit("CONNECT")
     try:
         conn.sendall(BANNER.encode())
-        while True:
-            data = conn.recv(1024).decode(errors="ignore").strip()
-            if not data:
-                break
-            parts = data.split(" ", 1)
-            cmd = parts[0].upper()
-            arg = parts[1] if len(parts) > 1 else ""
-            log(ip, port, cmd, arg)
-            if cmd == "PWD":
-                response = f"257 \"{cwd}\" is current directory\r\n"
-            elif cmd == "CWD":
-                target = resolve_fake_path(cwd, arg)
-                if target and target.exists() and target.is_dir():
-                    cwd = path_to_ftp(target)
-                    response = "250 Directory changed\r\n"
+        # TCP non conserva i confini dei comandi: readline gestisce sia
+        # frammentazione sia piu comandi nello stesso pacchetto.
+        with conn.makefile('rb') as stream:
+            while True:
+                line = stream.readline(MAX_COMMAND_BYTES + 1)
+                if not line:
+                    break
+                if len(line) > MAX_COMMAND_BYTES or not line.endswith(b'\r\n'):
+                    emit('INVALID', 'Command too long or missing CRLF')
+                    conn.sendall(b'500 Invalid command framing\r\n')
+                    break
+                try:
+                    data = line[:-2].decode('utf-8')
+                except UnicodeDecodeError:
+                    emit('INVALID', 'Invalid UTF-8 (hex prefix): ' + line[:1024].hex())
+                    conn.sendall(b'501 Invalid UTF-8\r\n')
+                    continue
+                verb, _, arg = data.partition(' ')
+                if not re.fullmatch(r'[A-Za-z]{3,16}', verb) or '\x00' in arg:
+                    emit('INVALID', data)
+                    conn.sendall(b'500 Invalid command\r\n')
+                    continue
+                cmd = verb.upper()
+                if cmd == 'USER':
+                    username = arg
+                emit(cmd, arg)
+                if cmd in DENIED_COMMANDS:
+                    response = "530 Not logged in; transfers disabled\r\n"
+                elif cmd == "PWD":
+                    response = f'257 "{cwd}" is current directory\r\n'
+                elif cmd == "CWD":
+                    target = resolve_fake_path(cwd, arg)
+                    if target and target.exists() and target.is_dir():
+                        cwd = path_to_ftp(target)
+                        response = "250 Directory changed\r\n"
+                    else:
+                        response = "550 Directory not found\r\n"
                 else:
-                    response = "550 Directory not found\r\n"
-            elif cmd == "LIST":
-                response = "150 Here comes the directory listing\r\n" + list_fake_dir(cwd, arg) + "226 Directory send OK\r\n"
-            elif cmd == "RETR":
-                response = retrieve_fake_file(cwd, arg)
-            else:
-                response = RESPONSES.get(cmd, "500 Unknown command\r\n")
-            conn.sendall(response.encode())
-            if cmd == "QUIT":
-                break
-    except Exception:
+                    response = RESPONSES.get(cmd, "500 Unknown command\r\n")
+                conn.sendall(response.encode())
+                if cmd == "QUIT":
+                    break
+    except (OSError, TimeoutError):
+        # La chiusura/timeout di una connessione non interrompe il listener.
         pass
     finally:
         conn.close()
-        log(ip, port, "DISCONNECT")
+        emit("DISCONNECT")
+
 
 def main():
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("0.0.0.0", 21))

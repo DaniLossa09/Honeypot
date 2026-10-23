@@ -228,6 +228,7 @@ def build_honeyfs(honeyfs: Path, company: str, sector: str, users: list[dict],
     # /etc
     safe_write(honeyfs / "etc/hostname", "server01\n")
     safe_write(honeyfs / "etc/issue", f"{company} - Sistema riservato. Accessi monitorati.\n\n")
+    safe_write(honeyfs / "etc/issue.net", f"{company} - Sistema riservato. Accessi monitorati.\n\n")
     safe_write(honeyfs / "etc/motd",
                f"\n  Benvenuto su server01 ({company})\n  Uso autorizzato esclusivamente al personale interno.\n\n")
     safe_write(honeyfs / "etc/os-release",

@@ -9,6 +9,7 @@ DEFAULT_ATTACK_SETTINGS: Dict[str, Any] = {
     'incident_bucket_seconds': 900,
     'post_login_dedupe_by_session': True,
     'enabled_sources': {
+        'portscan': True,
         'cowrie': True,
         'opencanary': True,
         'ftp': True,

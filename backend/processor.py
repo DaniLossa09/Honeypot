@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
@@ -28,8 +29,11 @@ class Processor:
         self._last_signal_ts = 0.0
         self.attack_settings = load_attack_settings()
         self._settings_mtime = self._settings_file_mtime()
-        reconcile_events(self._reconcile_attack_type, explain_attack, self._event_hash)
+        # La riconciliazione puo cancellare incidenti: richiede scelta esplicita.
+        if os.getenv('HPX_RECONCILE_ON_STARTUP', '0') == '1':
+            reconcile_events(self._reconcile_attack_type, explain_attack, self._event_hash)
         self.geo = GeoResolver()
+        self.file_states = {}
         self.offsets = self._load_offsets()
 
     def reload_attack_settings(self) -> Dict:
@@ -65,11 +69,15 @@ class Processor:
             saved = json.loads(OFFSETS_PATH.read_text(encoding='utf-8'))
         except Exception:
             saved = {}
-        return {name: int(saved.get(name, 0)) for name in LOG_PATHS}
+        if not isinstance(saved, dict):
+            saved = {}
+        states = saved.get('_files', {})
+        self.file_states = states if isinstance(states, dict) else {}
+        return {name: max(0, int(saved.get(name, 0))) for name in LOG_PATHS}
 
     def _save_offsets(self) -> None:
         OFFSETS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        OFFSETS_PATH.write_text(json.dumps(self.offsets, indent=2), encoding='utf-8')
+        OFFSETS_PATH.write_text(json.dumps({**self.offsets, '_files': self.file_states}, indent=2), encoding='utf-8')
 
     def _event_ts(self, event: Dict) -> float:
         value = event.get('timestamp')
@@ -95,6 +103,9 @@ class Processor:
             and self.attack_settings.get('post_login_dedupe_by_session', True)
         ):
             return '|'.join([source, ip, service, attack_type, str(raw_event.get('session'))])
+        if source == 'scada':
+            # Una lettura non deve nascondere una scrittura successiva nello stesso bucket.
+            return '|'.join([source, ip, service, attack_type, str(event.get('command') or ''), str(ts_bucket)])
         return '|'.join([source, ip, service, attack_type, str(ts_bucket)])
 
     def _signal_key(self, record: Dict, attack_type: str) -> str:
@@ -173,7 +184,9 @@ class Processor:
             if not self._source_enabled(source):
                 continue
             current_offset = self.offsets.get(source, 0)
-            records, new_offset = read_incremental(source, path, current_offset)
+            previous_state = self.file_states.get(source, {})
+            file_state = dict(previous_state) if isinstance(previous_state, dict) else {}
+            records, new_offset = read_incremental(source, path, current_offset, file_state)
 
             # Fase 1 - raw + classificazione: una sola transazione per blocco
             # (un commit = un fsync, non uno per riga: conta molto su SD).
@@ -215,9 +228,10 @@ class Processor:
             # fase lancia (geo/AI/insert), l'offset resta indietro e le righe
             # non inserite vengono riprocessate al giro dopo. Gli insert sono
             # idempotenti (event_hash / raw_hash), il replay non crea duplicati.
-            if new_offset != current_offset:
+            if new_offset != current_offset or file_state != previous_state:
                 offsets_changed = True
             self.offsets[source] = new_offset
+            self.file_states[source] = file_state
 
         self._prune_signal_history()
         # Niente righe nuove = niente scritture: offsets.json e l'export JSON
@@ -229,6 +243,7 @@ class Processor:
 
     def reset_attacks(self) -> Dict[str, int]:
         self.signal_history.clear()
+        self.file_states.clear()
         result = reset_events()
         # Avanza gli offset a fine file: "reset" = pulisci la vista e ignora tutto
         # cio che e gia nei log, cosi gli incidenti cancellati NON ricompaiono al

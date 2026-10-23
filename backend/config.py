@@ -39,6 +39,7 @@ DASHBOARD_AUTH_PATH = Path(os.getenv('HPX_DASHBOARD_AUTH_PATH', CONFIG_DIR / 'da
 ATTACK_SETTINGS_PATH = Path(os.getenv('HPX_ATTACK_SETTINGS_PATH', CONFIG_DIR / 'attack_settings.json'))
 
 LOG_PATHS = {
+    'portscan': os.getenv('HPX_PORTSCAN_LOG', '/var/log/honeypotx-portscan/events.jsonl'),
     'cowrie': os.getenv('HPX_COWRIE_LOG', '/home/cyferwall/honeypot/honeypots/logs/cowrie/cowrie.json'),
     'opencanary': os.getenv('HPX_OPENCANARY_LOG', '/home/cyferwall/honeypot/honeypots/logs/opencanary/opencanary.log'),
     'ftp': os.getenv('HPX_FTP_LOG', '/home/cyferwall/honeypot/honeypots/logs/ftp/ftp.json'),

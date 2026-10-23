@@ -30,6 +30,8 @@ class ProcessorFlowTest(unittest.TestCase):
 
         self.old_env = os.environ.copy()
         os.environ.update({
+            "HPX_RECONCILE_ON_STARTUP": "1",
+            "HPX_PORTSCAN_LOG": str(self.root / "portscan.jsonl"),
             "HPX_COWRIE_LOG": str(self.cowrie_log),
             "HPX_OPENCANARY_LOG": str(self.opencanary_log),
             "HPX_FTP_LOG": str(self.ftp_log),
@@ -41,6 +43,7 @@ class ProcessorFlowTest(unittest.TestCase):
             "HPX_DB_PATH": str(self.db_path),
             "HPX_OFFSETS_PATH": str(self.offsets_path),
             "HPX_EVENTS_EXPORT_PATH": str(self.export_path),
+            "HPX_EXPORT_DIR": str(self.root / "exports"),
             "HPX_GEO_CACHE_PATH": str(self.geo_cache_path),
             "HPX_ATTACK_SETTINGS_PATH": str(self.root / "attack_settings.json"),
         })
@@ -75,6 +78,92 @@ class ProcessorFlowTest(unittest.TestCase):
     def _append_json(self, path, obj):
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(obj) + "\n")
+
+    def test_host_portscan_flows_to_incidents_map_and_reconciliation(self):
+        from scripts.portscan_sensor import scan_event
+        path = self.root / 'portscan.jsonl'
+        event = scan_event('192.0.2.1', '192.0.2.2', 50000, 443,
+                           list(range(1, 13)), 10)
+        self._append_json(path, event)
+        processor = self._processor()
+        self.assertEqual(processor.process_once(), 1)
+        rows = self.db.fetch_events()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['source'], 'portscan')
+        self.assertEqual(rows[0]['attack_type'], 'Port Scan')
+        self.assertEqual(rows[0]['mitre_technique'], 'T1595')
+        self.assertEqual(processor.process_once(), 0)
+        # Il replay e la riconciliazione conservano l'incidente host.
+        self._processor()
+        self.assertEqual(len(self.db.fetch_events()), 1)
+
+    def test_default_startup_preserves_historical_incidents(self):
+        self.db.init_db()
+        from backend.parsers import parse_cowrie_line
+        record = parse_cowrie_line(json.dumps({
+            'timestamp': '2026-04-29T18:00:00Z', 'src_ip': '127.0.0.1',
+            'eventid': 'cowrie.session.connect', 'protocol': 'ssh',
+        }))
+        self.db.insert_event({**record, 'event_hash': 'historical-noise', 'attack_type': 'Unknown'})
+        with patch.dict(os.environ):
+            os.environ.pop('HPX_RECONCILE_ON_STARTUP', None)
+            self._processor()
+        self.assertEqual(len(self.db.fetch_events()), 1)
+
+    def test_credential_context_includes_multiple_sessions_and_configured_window(self):
+        self.settings.save_attack_settings({'credential_window_seconds': 60})
+        processor = self._processor()
+        for protocol in ('ssh', 'telnet'):
+            for i, ts in enumerate(('18:00:00', '18:02:00', '18:02:10', '18:02:20')):
+                self._append_json(self.cowrie_log, {
+                    'timestamp': '2026-04-29T' + ts + 'Z', 'src_ip': '192.0.2.101',
+                    'eventid': 'cowrie.login.failed', 'protocol': protocol,
+                    'session': protocol + str(i), 'username': 'audit', 'password': 'probe',
+                })
+        processor.process_once()
+        events = self.db.fetch_events()
+        self.assertEqual(len(events), 2)
+        for event in events:
+            context = self.db.fetch_event_context(event['id'])
+            self.assertEqual(len(context['raw_events']), 3)
+            self.assertEqual(len({r['session'] for r in context['raw_events']}), 3)
+            self.assertTrue(all(r['eventid'] == 'cowrie.login.failed' for r in context['raw_events']))
+
+    def test_ftp_session_ports_and_credentials_survive_db_and_context(self):
+        processor = self._processor()
+        for command, argument in [('USER', 'audit'), ('PASS', 'probe'), ('RETR', 'README.txt')]:
+            self._append_json(self.ftp_log, {
+                'timestamp': '2026-04-29T18:00:00Z', 'src_ip': '192.0.2.102',
+                'src_port': 50123, 'dst_port': 21, 'protocol': 'ftp', 'session': 'ftp-session',
+                'username': 'audit', 'command': command, 'argument': argument,
+            })
+        processor.process_once()
+        event = self.db.fetch_events()[0]
+        self.assertEqual((event['src_port'], event['dst_port']), (50123, 21))
+        context = self.db.fetch_event_context(event['id'])
+        self.assertEqual(len(context['raw_events']), 3)
+        password = next(r for r in context['raw_events'] if r['command'] == 'PASS')
+        self.assertEqual((password['username'], password['password']), ('audit', 'probe'))
+        self.assertEqual((password['src_port'], password['dst_port'], password['session']),
+                         (50123, 21, 'ftp-session'))
+        self.assertEqual(self.db._credential_attempt_count(context['raw_events']), 1)
+
+    def test_scada_distinct_requests_survive_dedup_and_writes_are_visible(self):
+        processor = self._processor()
+        base = {'timestamp': '2026-04-29T18:00:00Z', 'src_ip': '192.0.2.110',
+                'src_port': 50123, 'dst_port': 102, 'data_type': 's7comm', 'session': 's7-test'}
+        for index, (event, function) in enumerate([('connection', None), ('s7_request', 'SETUP_COMM'),
+                                                  ('s7_request', 'READ_VAR'), ('s7_request', 'READ_VAR'),
+                                                  ('s7_request', 'WRITE_VAR')]):
+            self._append_json(self.scada_log, {**base, 'event_id': f'{index:032x}', 'event': event,
+                                             'data': {'function': function} if function else {}})
+        processor.process_once()
+        events = self.db.fetch_events()
+        self.assertEqual(len(events), 2)
+        self.assertTrue(any(e['mitre_subtechnique'] == 'T1692.001' for e in events))
+        with self.db.get_conn() as conn:
+            self.assertEqual(conn.execute('SELECT count(*) FROM raw_events').fetchone()[0], 5)
+        self.assertEqual(processor.process_once(), 0)
 
     def test_process_once_raises_credential_incidents_only_after_threshold(self):
         processor = self._processor()
@@ -200,6 +289,7 @@ class ProcessorFlowTest(unittest.TestCase):
         self.assertEqual(ip_detail["top_paths"][0]["value"], "/index.html")
         ip_report = self.reports.export_ip_report("192.0.2.50", report_format="html")
         self.assertTrue(ip_report.exists())
+        self.assertTrue(ip_report.is_relative_to(self.root))
         self.assertIn("Report IP 192.0.2.50", ip_report.read_text(encoding="utf-8"))
 
         self._processor()
@@ -268,6 +358,8 @@ class ProcessorFlowTest(unittest.TestCase):
 
         html_report = self.reports.export_incident_report(post_login["id"], report_format="html")
         json_report = self.reports.export_incident_report(post_login["id"], report_format="json")
+        self.assertTrue(html_report.is_relative_to(self.root))
+        self.assertTrue(json_report.is_relative_to(self.root))
         self.assertTrue(html_report.exists())
         self.assertTrue(json_report.exists())
         self.assertIn("Report incidente", html_report.read_text(encoding="utf-8"))

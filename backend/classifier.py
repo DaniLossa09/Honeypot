@@ -1,4 +1,6 @@
 import re
+
+from .parsers import validate_record
 from typing import Any, Dict, Optional
 
 SQLI_PATTERNS = [
@@ -123,6 +125,8 @@ def _classify_web(record: Dict[str, Any]) -> Optional[str]:
     web_text = _web_text(record)
     user_agent = str(record.get('user_agent') or '').lower()
 
+    if logtype in {'5001', '5002', '5003', '5004', '5005'}:
+        return 'Port Scan'
     if logtype == '1001':
         return None
     if _match_any(SQLI_PATTERNS, web_text):
@@ -166,20 +170,28 @@ def _classify_smb(record: Dict[str, Any]) -> Optional[str]:
 
 
 def _classify_scada(record: Dict[str, Any]) -> Optional[str]:
+    if record.get('eventid') not in {'modbus_request', 's7_request'}:
+        return None
+    if not record.get('command') or record['command'] == 'SETUP_COMM':
+        return None
     return 'SCADA Attack'
 
 
 def classify_attack(record: Dict[str, Any]) -> Optional[str]:
+    validate_record(record)
     text = _text(record)
     port = int(record.get('port') or 0)
     service = (record.get('service') or '').lower()
     source = (record.get('source') or '').lower()
 
+    # Il sensore host descrive una scansione anche se l'ultima porta e FTP/SSH.
+    if source == 'portscan':
+        return _classify_web(record)
     if source == 'cowrie':
         return _classify_cowrie(record)
     if source == 'ftp' or service == 'ftp' or port == 21:
         return _classify_ftp(record)
-    if source == 'opencanary' or service in {'http', 'https'} or port in {80, 443}:
+    if source in {'opencanary', 'portscan'} or service in {'http', 'https'} or port in {80, 443}:
         return _classify_web(record)
     if source == 'mysql' or service == 'mysql' or port == 3306:
         return _classify_mysql(record)
@@ -193,6 +205,7 @@ def classify_attack(record: Dict[str, Any]) -> Optional[str]:
 
 
 def classify_signal(record: Dict[str, Any]) -> Optional[str]:
+    validate_record(record)
     source = (record.get('source') or '').lower()
     eventid = str(record.get('eventid') or '').lower()
     command = str(record.get('command') or '').strip().upper()
@@ -205,7 +218,7 @@ def classify_signal(record: Dict[str, Any]) -> Optional[str]:
         return 'Credential Attack'
     if source == 'opencanary' and logtype == '3001' and _has_submitted_credentials(record):
         return 'Credential Attack'
-    if source == 'mysql' and eventid == 'login_attempt':
+    if source == 'mysql' and eventid == 'login_attempt' and record.get('username'):
         return 'Credential Attack'
     if source == 'smb' and eventid == 'auth_attempt' and record.get('username'):
         return 'Credential Attack'

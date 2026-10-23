@@ -52,9 +52,17 @@ class DetectionRulesTest(unittest.TestCase):
         self.assertIsNone(classify_attack(exit_command))
         self.assertEqual(classify_attack(command), "Post-Login Activity")
 
+    def test_opencanary_portscan_logtypes(self):
+        for logtype in range(5001, 5006):
+            record = parse_opencanary_line(json.dumps({
+                'utc_time': '2026-10-20T16:00:00Z', 'logtype': logtype,
+                'src_host': '127.0.0.1', 'dst_port': 80, 'logdata': {}}))
+            self.assertEqual(classify_attack(record), 'Port Scan')
+
     def test_opencanary_login_is_signal_but_web_attacks_are_incidents(self):
         login = parse_opencanary_line(json.dumps({
             "dst_port": 80,
+            "utc_time": "2026-04-29T18:00:00Z",
             "logtype": 3001,
             "src_host": "192.0.2.20",
             "logdata": {
@@ -65,6 +73,7 @@ class DetectionRulesTest(unittest.TestCase):
         }))
         sql_injection = parse_opencanary_line(json.dumps({
             "dst_port": 80,
+            "utc_time": "2026-04-29T18:00:00Z",
             "logtype": 3000,
             "src_host": "192.0.2.20",
             "logdata": {
@@ -73,6 +82,7 @@ class DetectionRulesTest(unittest.TestCase):
         }))
         xss = parse_opencanary_line(json.dumps({
             "dst_port": 443,
+            "utc_time": "2026-04-29T18:00:00Z",
             "logtype": 3000,
             "src_host": "192.0.2.20",
             "logdata": {
@@ -81,6 +91,7 @@ class DetectionRulesTest(unittest.TestCase):
         }))
         normal_page = parse_opencanary_line(json.dumps({
             "dst_port": 80,
+            "utc_time": "2026-04-29T18:00:00Z",
             "logtype": 3000,
             "src_host": "192.0.2.20",
             "logdata": {

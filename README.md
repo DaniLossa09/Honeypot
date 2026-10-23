@@ -42,10 +42,10 @@ honeypot logs ──► parsers ──► classifier ──► processor ──�
 |---|---|---|
 | **Cowrie** | SSH / Telnet | Full interactive session: login attempts, commands typed after login, malware download attempts |
 | **OpenCanary** | HTTP/HTTPS + more | Web recon, credential submission, common canary triggers |
-| **Dionaea (FTP)** | FTP / 21 | Login attempts, file transfer commands, sandboxed fake filesystem |
+| **Dionaea (FTP)** | FTP / 21 | Login and command capture; authentication and data transfers explicitly denied |
 | **MySQL honeypot** | 3306 | Real `HandshakeV10` negotiation, captured username/database, `ER_ACCESS_DENIED` |
 | **SMB honeypot** | 445 | SMB2 negotiate + NTLM challenge/response, captured username/domain, `STATUS_ACCESS_DENIED` |
-| **SCADA honeypot** | Modbus/TCP 502, S7comm 102 | Function codes, fake register values — built from scratch (Conpot is amd64-only, this stack targets ARM64) |
+| **SCADA honeypot** | Modbus/TCP 502, S7comm 102 | Validated requests, addresses and values; bounded in-memory register/DB1 state, no real PLC |
 
 All custom honeypots (MySQL/SMB/SCADA) are hand-written Python, dependency-free, and speak
 just enough of their protocol to complete a believable handshake before logging the attempt
@@ -140,7 +140,22 @@ chmod +x scripts/install.sh
 dashboard credentials in `config/`. It refuses to run as root (the app must own its own data
 files — see [Permissions](#permissions--ownership) below).
 
-Start the API:
+Per avviare insieme i container (con build), il server della dashboard sulla porta
+8080 e il backend usando la `.venv`:
+
+```bash
+./start.sh
+```
+
+Lo script funziona da qualsiasi directory e va eseguito senza `sudo`. Apri
+<http://localhost:8080/dashboard_live.html>. Con `Ctrl+C` si fermano backend e
+server dashboard; i container Docker restano accesi. Per fermare anche i container:
+
+```bash
+docker compose -f honeypots/docker-compose.yml down
+```
+
+Start the API manually:
 
 ```bash
 python3 run_all.py
@@ -265,3 +280,79 @@ More detail in `docs/PROJECT_OVERVIEW.md`, `docs/INSTALL.md`, and
 
 No license file is currently included — all rights reserved by default. Contact the
 repository owner before reusing or redistributing this code.
+
+### Contatori e recupero dei log
+
+La dashboard distingue gli incidenti correlati (totale globale di `/stats`) dai login
+OpenCanary acquisiti in `raw_events`. Filtri e grafici operano sulla vista degli ultimi
+200 incidenti, il totale globale resta indipendente da questa finestra. I login sotto
+soglia restano nei grezzi e non aumentano il numero di incidenti.
+
+Gli offset in byte esistenti restano validi; `_files` aggiunge identità del file e
+un'impronta dei byte precedenti all'offset per rilevare sostituzioni e troncamenti.
+La prima adozione dei metadati non rilegge lo storico. Se la rotazione rimuove byte
+prima che il processor li legga, quei byte non sono recuperabili dal solo file corrente.
+
+La riconciliazione dello storico all'avvio è disattivata per default: può eliminare
+incidenti non più classificati o raggruppati. `HPX_RECONCILE_ON_STARTUP=1` la abilita
+esplicitamente; usarla solo dopo backup e approvazione delle modifiche allo storico.
+
+### SSH, Telnet e FTP
+
+FTP conserva sessione, username e porte della connessione nei log JSON. Legge i comandi
+per righe CRLF (limite 8192 byte), indipendentemente dai pacchetti TCP. L'autenticazione
+resta negata; trasferimenti e modalità dati, incluse PASV/EPSV/PORT/EPRT, rispondono 530.
+È pubblicata soltanto la porta di controllo 21; non vengono aperte connessioni dati.
+
+I nuovi eventi espongono `src_port` e `dst_port` anche in DB/API, se presenti nel log
+sorgente. I campi mancanti restano null; `port` usa la porta destinazione disponibile o
+il valore del servizio (22 SSH, 23 Telnet, 21 FTP). Le vecchie righe non vengono riscritte.
+Le opzioni di negoziazione Telnet restano nel JSON originale e non sono comandi shell.
+Gli incidenti credenziali correlano i segnali dello stesso IP/servizio nella finestra
+configurata anche quando provengono da sessioni diverse.
+
+### MySQL, SCADA e isolamento
+
+MySQL conserva il diniego di autenticazione (1045): registra negoziato, login e database
+richiesto, senza accettare sessioni query o collegarsi a database reali.
+Modbus gestisce FC 1/2/3/4/5/6/15/16/17/23, con 128 registri e 2048 coil per unità.
+S7 gestisce COTP, negoziato PDU e letture/scritture BYTE di una variabile per richiesta
+nel DB1 (4096 byte). Le operazioni non supportate ricevono errori espliciti. Lo stato
+emulato è limitato alla memoria del processo e riparte al riavvio. I log contengono
+solo interazioni effettivamente ricevute, timestamp per evento e identificatore univoco.
+Le scritture osservate possono ricevere ATT&CK ICS T1692.001 (confidenza Medio);
+una connessione o lettura non prova sfruttamento di vulnerabilità.
+
+MySQL/SCADA girano come UID 10001/10002, senza capability, con root filesystem in sola
+lettura e healthcheck passivi. Prima del primo avvio preparare i bind mount e installare
+il contenimento persistente dall'host:
+
+```bash
+sudo python3 scripts/honeypot_isolation.py install
+docker compose -f honeypots/docker-compose.yml up -d --build
+```
+
+L'installazione richiede una rete `honeypots_honeypot-net` già esistente; su un host
+nuovo crearla prima con `docker compose -f honeypots/docker-compose.yml create`, che
+prepara i container senza avviarli. Lo script modifica soltanto ownership dei due log,
+le proprie tabelle nftables `inet/bridge hpx_isolation` e le proprie unità systemd.
+Blocca nuove connessioni verso host/reti e fra honeypot, lasciando le risposte ai client.
+Il servizio carica il bridge salvato prima di Docker; il timer aggiorna le regole ogni
+30 secondi. Dopo una ricreazione della rete attendere e verificare l'aggiornamento
+prima di esporre i servizi. Tutti i servizi usano DNS locale non inoltrato all'esterno.
+
+```bash
+systemctl is-active honeypotx-isolation.service honeypotx-isolation-refresh.timer
+sudo python3 /usr/local/libexec/honeypotx-isolation.py status
+# Rollback delle sole regole/unità HoneypotX, senza cancellare dati:
+sudo python3 /usr/local/libexec/honeypotx-isolation.py rollback
+```
+
+Le regole coprono IPv4/IPv6; nella rete attuale IPv6 non ha una route utilizzabile.
+Il dettaglio del collaudo e dei limiti verificati è in `docs/AUDIT_PHASE4.md`.
+
+### Audit e regressione
+
+Esiti, fix e punti aperti: [report finale](docs/AUDIT_FINAL.md).
+Stato verificato: [istantanea JSON](docs/AUDIT_FINAL_STATE.json).
+Proposta di collaudo periodico: [piano di regressione](docs/REGRESSION_PLAN.md).

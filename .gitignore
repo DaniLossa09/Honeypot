@@ -31,3 +31,7 @@ honeypots/cowrie/cowrie.cfg.backup.*
 honeypots/docker-compose.yml.backup.*
 honeypots/cowrie/honeyfs.backup.*/
 honeypots/cowrie/share/cowrie/fs.pickle.backup.*
+
+# Database runtime dei servizi honeypot.
+honeypots/*.db
+honeypots/*.db-*

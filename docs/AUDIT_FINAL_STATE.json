@@ -1,0 +1,106 @@
+{
+  "checked_at_utc": "2026-10-20T17:40:01.079898+00:00",
+  "sqlite_quick_check": "ok",
+  "counts": {
+    "events": 65,
+    "raw_events": 459
+  },
+  "raw_by_source": {
+    "cowrie": 201,
+    "ftp": 89,
+    "mysql": 40,
+    "opencanary": 56,
+    "scada": 71,
+    "smb": 2
+  },
+  "stats": {
+    "opencanary_login_attempts": 23,
+    "total": 65,
+    "high": 29,
+    "medium": 30,
+    "countries": 0
+  },
+  "health": {
+    "status": "ok"
+  },
+  "log_offsets": {
+    "cowrie": {
+      "offset": 88724,
+      "size": 88724,
+      "at_eof": true
+    },
+    "opencanary": {
+      "offset": 281524,
+      "size": 281524,
+      "at_eof": true
+    },
+    "ftp": {
+      "offset": 97569,
+      "size": 97569,
+      "at_eof": true
+    },
+    "mysql": {
+      "offset": 308620,
+      "size": 308620,
+      "at_eof": true
+    },
+    "smb": {
+      "offset": 35878,
+      "size": 35878,
+      "at_eof": true
+    },
+    "scada": {
+      "offset": 56363,
+      "size": 56363,
+      "at_eof": true
+    }
+  },
+  "containers": [
+    {
+      "name": "cowrie",
+      "status": "running",
+      "health": "not_configured",
+      "user": "999:999",
+      "restart_count": 0
+    },
+    {
+      "name": "opencanary",
+      "status": "running",
+      "health": "not_configured",
+      "user": "root",
+      "restart_count": 0
+    },
+    {
+      "name": "dionaea",
+      "status": "running",
+      "health": "not_configured",
+      "user": "root",
+      "restart_count": 0
+    },
+    {
+      "name": "mysql-honeypot",
+      "status": "running",
+      "health": "healthy",
+      "user": "10001:10001",
+      "restart_count": 0
+    },
+    {
+      "name": "smb-honeypot",
+      "status": "running",
+      "health": "not_configured",
+      "user": "root",
+      "restart_count": 0
+    },
+    {
+      "name": "scada-honeypot",
+      "status": "running",
+      "health": "healthy",
+      "user": "10002:10002",
+      "restart_count": 0
+    }
+  ],
+  "isolation_units": [
+    "active",
+    "active"
+  ]
+}

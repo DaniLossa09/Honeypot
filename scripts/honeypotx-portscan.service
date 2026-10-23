@@ -1,0 +1,31 @@
+[Unit]
+Description=HoneypotX passive host TCP port scan sensor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cyferwall
+Group=cyferwall
+ExecStart=/usr/bin/python3 -I /usr/local/libexec/honeypotx-portscan.py
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_PACKET AF_NETLINK AF_INET AF_INET6 AF_UNIX
+LogsDirectory=honeypotx-portscan
+LogsDirectoryMode=0755
+UMask=0022
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

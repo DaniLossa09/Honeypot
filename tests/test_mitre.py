@@ -29,6 +29,16 @@ class MitreMappingTest(unittest.TestCase):
             self.assertEqual(result["mitre_subtechnique"], sub, attack_type)
             self.assertEqual(result["mitre_confidence"], "Alto", attack_type)
 
+    def test_scada_mapping_uses_ics_only_for_observed_write_commands(self):
+        result = map_attack_to_mitre('SCADA Attack', {'source': 'scada', 'command': 'WRITE_VAR'})
+        self.assertEqual((result['mitre_tactic'], result['mitre_technique'], result['mitre_subtechnique']),
+                         ('TA0106', 'T1692', 'T1692.001'))
+        metadata = resolve_mitre(**{k.removeprefix('mitre_'): v for k, v in result.items()})
+        self.assertEqual(metadata['mitre_domain'], 'ics')
+        self.assertEqual(metadata['mitre_object_version'], '2.0')
+        self.assertIsNone(map_attack_to_mitre('SCADA Attack', {'command': 'READ_VAR'})['mitre_technique'])
+        self.assertIsNone(map_attack_to_mitre('Database Attack', {'command': 'QUERY'})['mitre_technique'])
+
     def test_command_injection_subtechnique_only_for_shell_sources(self):
         shell = map_attack_to_mitre("Command Injection", {"source": "cowrie"})
         self.assertEqual(shell["mitre_subtechnique"], "T1059.004")

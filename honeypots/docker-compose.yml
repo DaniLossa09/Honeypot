@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   honeypot-net:
     driver: bridge
@@ -14,6 +12,7 @@ services:
     container_name: cowrie
     user: "999:999"
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "22:2222"    # SSH
       - "23:2223"    # Telnet
@@ -30,6 +29,7 @@ services:
     build: ./opencanary
     container_name: opencanary
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "80:80"
       - "443:443"
@@ -42,9 +42,9 @@ services:
     build: ./dionaea
     container_name: dionaea
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "21:21"
-      - "20:20"
     volumes:
       - ./logs/ftp:/opt/dionaea/var/log/dionaea
       - ./fake_corp/ftp_root:/opt/dionaea/fake_corp/ftp_root:ro
@@ -54,7 +54,22 @@ services:
   mysql-honeypot:
     build: ./mysql
     container_name: mysql-honeypot
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os; rows=open('/proc/net/tcp').readlines()[1:]; active={int(r.split()[1].split(':')[1],16) for r in rows if r.split()[3]=='0A'}; assert {3306}.issubset(active) and os.access('/opt/honeypot/logs/mysql.json',os.W_OK)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "3306:3306"
     volumes:
@@ -66,6 +81,7 @@ services:
     build: ./smb
     container_name: smb-honeypot
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "445:445"
     volumes:
@@ -76,7 +92,22 @@ services:
   scada-honeypot:
     build: ./scada
     container_name: scada-honeypot
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os; rows=open('/proc/net/tcp').readlines()[1:]; active={int(r.split()[1].split(':')[1],16) for r in rows if r.split()[3]=='0A'}; assert {102, 502}.issubset(active) and os.access('/opt/honeypot/logs/conpot.json',os.W_OK)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    user: "10002:10002"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     restart: unless-stopped
+    dns: [127.0.0.1]
     ports:
       - "502:502"   # Modbus/TCP
       - "102:102"   # S7comm / ISO-on-TCP (Siemens S7)

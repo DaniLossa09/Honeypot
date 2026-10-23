@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .config import DB_PATH, EVENTS_EXPORT_PATH
 from .mitre import aggregate_discovery, map_attack_to_mitre, resolve_mitre
+from .parsers import parse_portscan_line, parse_opencanary_line, parse_cowrie_line, parse_ftp_line, parse_mysql_line, parse_scada_line, validate_record
+from .settings import load_attack_settings
 from .utils import sha256_text
 
 SCHEMA = '''
@@ -86,6 +88,7 @@ def reset_events() -> Dict[str, int]:
 # Colonne aggiunte dopo la prima release: vanno create con ALTER TABLE sui DB
 # esistenti (CREATE TABLE IF NOT EXISTS non aggiunge colonne a tabelle gia presenti).
 _EVENT_MIGRATIONS = {
+    'src_port': 'INTEGER', 'dst_port': 'INTEGER',
     'mitre_tactic': 'TEXT',
     'mitre_technique': 'TEXT',
     'mitre_subtechnique': 'TEXT',
@@ -136,6 +139,10 @@ def init_db() -> None:
         conn.execute('PRAGMA journal_mode=WAL')
         conn.executescript(SCHEMA)
         _migrate_events(conn)
+        raw_columns = {row[1] for row in conn.execute('PRAGMA table_info(raw_events)')}
+        for column in ('src_port', 'dst_port'):
+            if column not in raw_columns:
+                conn.execute(f'ALTER TABLE raw_events ADD COLUMN {column} INTEGER')
         # Dopo la migrazione la colonna triage_status esiste sempre (fresh DB o
         # ALTER TABLE): l'indice va creato qui, non nello SCHEMA, altrimenti su
         # un DB esistente fallirebbe (colonna non ancora aggiunta a quel punto).
@@ -158,6 +165,7 @@ def get_conn():
 
 
 def insert_event(event: Dict[str, Any], conn: Optional[sqlite3.Connection] = None) -> bool:
+    validate_record(event)
     sql = '''
     INSERT OR IGNORE INTO events (
         event_hash, timestamp, source, ip, port, service, raw_payload,
@@ -165,8 +173,8 @@ def insert_event(event: Dict[str, Any], conn: Optional[sqlite3.Connection] = Non
         explanation_it, advice, mitre_tactic, mitre_technique,
         mitre_subtechnique, mitre_confidence,
         ai_explanation, ai_attacker_profile, ai_defense,
-        raw_event_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        raw_event_json, src_port, dst_port
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     values = (
         event['event_hash'], event.get('timestamp'), event.get('source'), event.get('ip'),
@@ -178,6 +186,7 @@ def insert_event(event: Dict[str, Any], conn: Optional[sqlite3.Connection] = Non
         event.get('mitre_subtechnique'), event.get('mitre_confidence'),
         event.get('ai_explanation'), event.get('ai_attacker_profile'), event.get('ai_defense'),
         json.dumps(event.get('raw_event', {}), ensure_ascii=False),
+        event.get('src_port'), event.get('dst_port'),
     )
     # Con una connessione esterna (batch del processor) niente commit qui:
     # transazione e commit sono gestiti dal chiamante.
@@ -211,13 +220,14 @@ def _raw_hash(record: Dict[str, Any]) -> str:
 
 
 def insert_raw_event(record: Dict[str, Any], conn: Optional[sqlite3.Connection] = None) -> bool:
+    validate_record(record)
     raw_event = _raw_dict(record)
     sql = '''
     INSERT OR IGNORE INTO raw_events (
         raw_hash, timestamp, source, ip, port, service, eventid, event_type,
         username, password, command, argument, path, uri, user_agent, session,
-        raw_payload, raw_event_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        raw_payload, raw_event_json, src_port, dst_port
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     values = (
         _raw_hash(record), record.get('timestamp'), record.get('source'), record.get('ip'),
@@ -225,6 +235,7 @@ def insert_raw_event(record: Dict[str, Any], conn: Optional[sqlite3.Connection] 
         record.get('username'), record.get('password'), record.get('command'), record.get('argument'),
         record.get('path'), record.get('uri'), record.get('user_agent'), _raw_session(raw_event),
         record.get('raw_payload'), json.dumps(raw_event, ensure_ascii=False),
+        record.get('src_port'), record.get('dst_port'),
     )
     if conn is not None:
         return conn.execute(sql, values).rowcount > 0
@@ -239,6 +250,12 @@ def _record_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         raw_event = json.loads(row['raw_event_json'] or '{}')
     except Exception:
         raw_event = {}
+
+    if row['source'] in {'portscan', 'opencanary', 'cowrie', 'ftp', 'mysql', 'scada'}:
+        parser = {'portscan': parse_portscan_line, 'opencanary': parse_opencanary_line, 'cowrie': parse_cowrie_line, 'ftp': parse_ftp_line, 'mysql': parse_mysql_line, 'scada': parse_scada_line}[row['source']]
+        record = parser(json.dumps(raw_event))
+        record['attack_type'] = row['attack_type']
+        return record
 
     logdata = raw_event.get('logdata', {}) if isinstance(raw_event.get('logdata'), dict) else {}
     command = raw_event.get('command') or raw_event.get('action') or raw_event.get('input')
@@ -343,6 +360,15 @@ def _risk_band(score: int) -> str:
     return 'Basso'
 
 
+def _credential_attempt_count(raw_events: List[Dict[str, Any]]) -> int:
+    return sum(
+        (item.get('username') is not None or item.get('password') is not None)
+        and (item.get('source') != 'ftp' and item.get('service') != 'ftp'
+             or item.get('command') in {'PASS', 'ACCT'})
+        for item in raw_events
+    )
+
+
 def _event_risk_score(event: Dict[str, Any], raw_events: Optional[List[Dict[str, Any]]] = None) -> int:
     attack_type = event.get('attack_type') or 'Unknown'
     danger = event.get('danger_level') or 'Basso'
@@ -367,10 +393,7 @@ def _event_risk_score(event: Dict[str, Any], raw_events: Optional[List[Dict[str,
 
     score += {'Alto': 8, 'Medio': 4, 'Basso': 0}.get(danger, 0)
 
-    credential_attempts = len([
-        item for item in raw_events
-        if item.get('username') is not None or item.get('password') is not None
-    ])
+    credential_attempts = _credential_attempt_count(raw_events)
     commands = {str(item.get('command') or '').strip().lower() for item in raw_events if item.get('command')}
     paths = {str(item.get('path') or item.get('uri') or '').strip() for item in raw_events if item.get('path') or item.get('uri')}
     sessions = {str(item.get('session') or '').strip() for item in raw_events if item.get('session')}
@@ -466,6 +489,9 @@ def _row_dict(row: sqlite3.Row) -> Dict[str, Any]:
 
 
 def _compact_raw_event(row: Dict[str, Any]) -> Dict[str, Any]:
+    if row.get('source') == 'cowrie' and row.get('eventid') == 'cowrie.telnet.option':
+        # Anche le vecchie righe restano intatte nel DB: correggiamo solo la vista.
+        row['command'] = None
     details = []
     if row.get('username') is not None:
         details.append(f"username={row.get('username')}")
@@ -492,30 +518,40 @@ def fetch_event_context(event_id: int, limit: int = 80) -> Optional[Dict[str, An
     raw_event = _parse_raw_event(event)
     session = raw_event.get('session')
     event_ts = _parse_timestamp(event.get('timestamp'))
-    window_start = event_ts - timedelta(minutes=10) if event_ts else None
-    window_end = event_ts + timedelta(minutes=2) if event_ts else None
+    credential = event.get('attack_type') == 'Credential Attack'
+    settings = load_attack_settings() if credential else {}
+    window_seconds = settings.get('credential_window_seconds', 600) if credential else 600
+    window_start = event_ts - timedelta(seconds=window_seconds) if event_ts else None
+    window_end = event_ts if credential else (event_ts + timedelta(minutes=2) if event_ts else None)
 
+    params = [event.get('source'), event.get('ip'), event.get('service')]
+    clauses = ['source = ?', 'ip = ?', 'service = ?']
+    if session and not credential:
+        clauses.append('session = ?')
+        params.append(str(session))
+    if window_start and window_end:
+        # Il filtro temporale precede LIMIT; julianday supporta anche i timestamp
+        # storici senza offset, senza riscrivere alcuna riga.
+        clauses.append('julianday(timestamp) BETWEEN julianday(?) AND julianday(?)')
+        params.extend([window_start.isoformat(), window_end.isoformat()])
+    if credential:
+        signal_filters = {
+            'cowrie': ('eventid = ?', ['cowrie.login.failed']),
+            'ftp': ('command IN (?, ?)', ['PASS', 'ACCT']),
+            'opencanary': ('event_type = ?', ['3001']),
+            'mysql': ('eventid = ?', ['login_attempt']),
+            'smb': ('eventid = ?', ['auth_attempt']),
+        }
+        clause, signal_params = signal_filters.get(event.get('source'), ('1 = 1', []))
+        clauses.append(clause)
+        params.extend(signal_params)
+    params.append(limit)
     with get_conn() as conn:
-        if session:
-            rows = conn.execute(
-                '''
-                SELECT * FROM raw_events
-                WHERE source = ? AND ip = ? AND service = ? AND session = ?
-                ORDER BY timestamp ASC, id ASC
-                LIMIT ?
-                ''',
-                (event.get('source'), event.get('ip'), event.get('service'), str(session), limit),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                '''
-                SELECT * FROM raw_events
-                WHERE source = ? AND ip = ? AND service = ?
-                ORDER BY timestamp ASC, id ASC
-                LIMIT ?
-                ''',
-                (event.get('source'), event.get('ip'), event.get('service'), max(limit * 4, limit)),
-            ).fetchall()
+        # I frammenti SQL sono costanti interne; tutti i valori sono parametri.
+        rows = conn.execute(
+            'SELECT * FROM raw_events WHERE ' + ' AND '.join(clauses) +
+            ' ORDER BY timestamp ASC, id ASC LIMIT ?', params,
+        ).fetchall()
 
     raw_events = []
     for row in rows:
@@ -574,10 +610,7 @@ def _incident_reason(event: Dict[str, Any], raw_events: List[Dict[str, Any]]) ->
     session = raw_event.get('session')
 
     if attack_type == 'Credential Attack':
-        attempts = len([
-            item for item in raw_events
-            if item.get('username') is not None or item.get('password') is not None
-        ])
+        attempts = _credential_attempt_count(raw_events)
         return (
             f"Segnalato perche lo stesso IP ha inviato credenziali verso {service or 'il servizio'} "
             f"piu volte nella finestra di correlazione. Tentativi correlati: {attempts or len(raw_events)}."
@@ -910,7 +943,13 @@ def fetch_stats(triage: Optional[str] = TRUE_POSITIVE) -> Dict[str, Any]:
             FROM events
             {where_clause}
         ''', params).fetchone()
+    with get_conn() as conn:
+        attempts = conn.execute(
+            'SELECT COUNT(*) FROM raw_events WHERE source = ? AND event_type = ?',
+            ('opencanary', '3001'),
+        ).fetchone()[0]
     return {
+        'opencanary_login_attempts': attempts,
         'total': row['total'] or 0,
         'high': row['high'] or 0,
         'medium': row['medium'] or 0,

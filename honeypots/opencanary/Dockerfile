@@ -11,6 +11,8 @@ RUN SKIN_DIR=$(python3 -c "import opencanary; import os; print(os.path.dirname(o
 
 COPY opencanary.conf /etc/opencanaryd/opencanary.conf
 
+COPY hpx.tac /opt/hpx/hpx.tac
+
 EXPOSE 80 443
 
-CMD ["sh", "-c", "rm -f /usr/local/bin/opencanaryd.pid && opencanaryd --dev"]
+CMD ["twistd", "--nodaemon", "--pidfile=", "--python=/opt/hpx/hpx.tac"]
